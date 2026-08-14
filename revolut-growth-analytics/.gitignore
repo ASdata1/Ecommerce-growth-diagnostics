@@ -1,0 +1,7 @@
+data/raw/
+data/*.db
+.ipynb_checkpoints/
+__pycache__/
+*.pyc
+.venv/
+venv/

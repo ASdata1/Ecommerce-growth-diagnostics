@@ -1,0 +1,12 @@
+-- Q3: PAYMENT / SEGMENT CUT
+-- How does average order value and average payment installments vary by customer state?
+--
+-- Tables:
+--   customers (customer_id, customer_state)
+--   order_payments (order_id, payment_value, payment_installments)
+--   orders (order_id, customer_id)  -- the join between customers and payments
+--
+-- TODO: write the aggregation query here.
+-- Expected output columns: customer_state, num_orders, avg_order_value, avg_installments
+-- Sort by avg_order_value descending. Consider filtering out states with very few orders
+-- (e.g. HAVING num_orders >= 30) so the average isn't noise from 1-2 customers.
