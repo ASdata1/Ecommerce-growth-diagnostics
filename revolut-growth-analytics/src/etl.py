@@ -1,14 +1,6 @@
 """
 ETL: raw Olist CSVs -> cleaned SQLite database (data/olist.db)
 
-This part is fully working - run it first with:
-    python src/etl.py
-
-It expects the 4 raw CSVs (downloaded from Kaggle, see README) sitting in data/raw/:
-    olist_orders_dataset.csv
-    olist_order_items_dataset.csv
-    olist_order_payments_dataset.csv
-    olist_customers_dataset.csv
 """
 
 import sqlite3
