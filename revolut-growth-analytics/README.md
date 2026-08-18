@@ -1,88 +1,80 @@
-# Revolut Growth Analytics Speedrun
+# Product Growth Analytics
 
-A weekend-scoped SQL + Python project that mirrors what a Revolut Graduate Data Scientist/Analyst
-actually does in week one: turn messy raw data into a clean, queryable table, then answer real
-product questions — where are we losing customers in the funnel, and which cohorts stick around.
+A small end-to-end analytics project: take messy raw order data, turn it into a clean queryable
+database, and use SQL to answer the kind of funnel, retention, and segmentation questions a
+product/growth analyst gets asked in week one at any company with a marketplace or checkout flow.
 
-Built as a portfolio piece for my application to Revolut's Graduate Programme (see
-`applications/Revolut_Graduate-Data-Scientist-Analyst/` in this job-hunt folder for the full
-gap analysis this project came out of).
+## Questions this project answers
+
+1. **Funnel** — of all orders placed, what % make it through each status (purchased → approved →
+   shipped → delivered), and which single handoff loses the most orders?
+2. **Cohort retention** — grouping customers by the month of their first order, what % of each
+   cohort comes back and places a second order in month 1, month 2?
+3. **Payment / segment cut** — how does average order value and payment installments vary by
+   customer region, and where's the volume vs. value mismatch?
+
+Each question is answered with a SQL query, a chart, and a short written finding in
+[`notebooks/analysis.ipynb`](notebooks/analysis.ipynb).
 
 ## The data
 
 [Olist Brazilian E-Commerce Public Dataset](https://www.kaggle.com/datasets/olistbr/brazilian-ecommerce)
-— ~100k real orders, 2016-2018. Free, requires a (free) Kaggle account to download.
+— ~100k real orders placed on a Brazilian e-commerce marketplace, 2016-2018. Free, requires a
+(free) Kaggle account to download. Only 4 of the 8 tables are used:
 
-Only 4 of the 8 tables are used, to keep this a weekend project:
 - `olist_orders_dataset.csv` — order status + timestamps
 - `olist_order_items_dataset.csv` — line items, price, freight
 - `olist_order_payments_dataset.csv` — payment type, installments, value
 - `olist_customers_dataset.csv` — customer id + state
 
-Download the zip, unzip it, and drop those 4 CSVs into `data/raw/` (already gitignored — don't
-commit raw data).
-
-## The 3 questions this project answers
-
-1. **Funnel** — of all orders placed, what % make it through each status
-   (created → approved → invoiced → shipped → delivered)? Where's the biggest drop-off?
-2. **Cohort retention** — group customers by the month of their first order. What % of each
-   cohort places a second order in month 1, 2, 3...?
-3. **Payment/segment cut** — how does average order value and payment installments vary by
-   customer state? (a rough stand-in for "which segment is most valuable")
-
 ## How it's built
 
-1. `src/etl.py` — reads the raw CSVs, does light cleaning (nulls, dtypes, dedup), loads them
-   into a local SQLite database at `data/olist.db`. This part is fully working — run it first.
-2. `queries/*.sql` — one SQL file per question above. **These are intentionally left as
-   skeletons with TODOs** — writing them is the actual skill-building part of this project.
-   See "Skills you'll need" below.
-3. `notebooks/analysis.ipynb` — runs each query against `data/olist.db`, charts the result,
-   and has a markdown cell for you to write the finding in plain English.
-4. `tests/test_etl.py` — a couple of sanity checks on the ETL output (row counts, no null keys).
+1. [`src/etl.py`](src/etl.py) — reads the raw CSVs, does light cleaning (nulls, dtypes, dedup),
+   loads them into a local SQLite database at `data/olist.db`, and indexes the join columns every
+   downstream query relies on.
+2. [`queries/`](queries) — one SQL file per question above, plus `step_funnel.sql` for the
+   stage-over-stage conversion view.
+3. [`notebooks/analysis.ipynb`](notebooks/analysis.ipynb) — runs each query against
+   `data/olist.db`, charts the result, and writes up the finding.
+4. [`tests/test_etl.py`](tests/test_etl.py) — data-quality checks on the ETL output: tables aren't
+   empty, key columns have no nulls, and referential integrity holds between orders/customers/items.
 
-## Setup
+## Skills demonstrated
+
+- **SQL**: CTEs, window-function-style cohort logic (`MIN()` per customer, month-offset math),
+  date truncation (`strftime`), self-joins, `GROUP BY`/`HAVING` aggregation, and indexing to keep
+  joins fast on ~100k-row tables.
+- **Python / pandas**: CSV ingestion, null handling, dtype coercion, de-duplication, and loading
+  into SQLite.
+- **Data visualisation**: `matplotlib` bar charts and a cohort-retention heatmap.
+- **Testing**: `pytest` fixtures and data-quality/referential-integrity assertions against a real
+  database, not mocks.
+- **Project structure**: a conventional `src/` + `tests/` + `queries/` layout instead of one
+  notebook doing everything.
+
+## How to run it
 
 ```bash
+git clone <this-repo-url>
+cd <cloned-directory>
 pip install -r requirements.txt
-# download data/raw/*.csv from the Kaggle link above first
-python src/etl.py
-pytest tests/
-jupyter notebook notebooks/analysis.ipynb
+
+# download the 4 CSVs listed above from the Kaggle link and place them in data/raw/
+python src/etl.py        # builds data/olist.db
+pytest tests/            # runs the data-quality checks
+jupyter notebook notebooks/analysis.ipynb   # or open it in VS Code / JupyterLab
 ```
 
-## Skills you'll need to learn to finish this (and where)
+Run all cells top to bottom in the notebook — it reads `../data/olist.db` and `../queries/*.sql`
+relative to its own folder, so it works from a fresh clone as long as `src/etl.py` has been run
+first.
 
-| File | What's missing | Skill to learn |
-| :-- | :-- | :-- |
-| `queries/funnel.sql` | The funnel query itself | SQL `CASE WHEN`, `GROUP BY`, computing % of a total (often via a CTE or subquery for the denominator) |
-| `queries/cohort_retention.sql` | The cohort query | SQL window functions (`MIN() OVER`), date truncation (`strftime` in SQLite), self-joins or `GROUP BY` to build a cohort table |
-| `queries/payment_by_state.sql` | The aggregation query | `GROUP BY` + `AVG()`/`COUNT()`, optionally `HAVING` to filter groups |
-| `tests/test_etl.py` | A couple of assertions | Basic `pytest` — one test per data-quality check |
-| `notebooks/analysis.ipynb` | The charts | `matplotlib` or `plotly` basics — a bar chart for the funnel, a heatmap for cohort retention |
+## Headline findings
 
-I can walk through any of these with you when you're ready — window functions and the cohort
-query are the two genuinely new skills here (everything else is a small step up from what you've
-already done in your SQL/pandas courses).
-
-## Why this project (and where else it's useful)
-
-This was scoped specifically to close the gap flagged for the Revolut posting: your Python/SQL
-are course-only, and Revolut wants "impressive" applied skill in exactly this kind of funnel/
-cohort/ad-hoc analysis. But the pattern is not fintech-specific:
-
-- **Any product/growth analyst role** (your target sectors — Sports, Healthcare, Tech, Cyber,
-  Production, Research) has a signup funnel and a retention question. Same repo, same queries,
-  a different story in the README about who the "customer" is.
-- **ML Engineer roles** care about the ETL half specifically — most ML engineering work is
-  building and testing clean data pipelines *before* any model gets trained. The `src/etl.py` +
-  `tests/test_etl.py` pair is exactly that pattern in miniature.
-- **The repo structure itself** (`src/`, `tests/`, `requirements.txt`) is a stated gap in your
-  profile (SWE best practices, rated 2/5) — this closes it regardless of which company you send
-  it to.
-- SQLite here is a stand-in for Snowflake/BigQuery/Postgres — the SQL you write transfers
-  directly; only the connection string changes.
-
-If you want, once this is done we can re-skin the same repo (new dataset, new README framing)
-for a sports- or healthcare-flavoured application without redoing the SQL skills from scratch.
+- The funnel is healthy end-to-end (97% of orders reach `delivered`), but the single biggest
+  stage-to-stage drop is **approved → shipped**, not payment approval or last-mile delivery.
+- Repeat purchase is the real growth problem: month-1 cohort retention sits under 1% almost
+  everywhere in the dataset, with no improving trend over time.
+- Order value and order volume are inversely related by region — the highest-volume region has
+  the *lowest* average order value, while low-volume, farther-out regions pay the most, most
+  likely reflecting freight cost baked into payment value.
