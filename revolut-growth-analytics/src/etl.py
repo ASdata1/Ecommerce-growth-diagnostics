@@ -54,6 +54,16 @@ def main() -> None:
             df.to_sql(name, conn, if_exists="replace", index=False)
             print(f"loaded {name}: {len(df):,} rows")
 
+        # join columns get hit by every downstream query (and the referential
+        # integrity tests) - without these, SQLite falls back to full table
+        # scans per row on the joins/subqueries below
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_orders_customer_id ON orders(customer_id)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_orders_order_id ON orders(order_id)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_order_items_order_id ON order_items(order_id)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_order_payments_order_id ON order_payments(order_id)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_customers_customer_id ON customers(customer_id)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_customers_customer_unique_id ON customers(customer_unique_id)")
+
     print(f"\ndone -> {DB_PATH}")
 
 
