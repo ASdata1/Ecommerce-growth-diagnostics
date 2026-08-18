@@ -2,7 +2,7 @@
 
 A small end-to-end analytics project: take messy raw order data, turn it into a clean queryable
 database, and use SQL to answer the kind of funnel, retention, and segmentation questions a
-product/growth analyst gets asked in week one at any company with a marketplace or checkout flow.
+product/growth analyst gets asked at any company with a marketplace or checkout flow.
 
 ## Questions this project answers
 
