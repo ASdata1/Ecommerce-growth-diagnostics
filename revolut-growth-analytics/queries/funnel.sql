@@ -6,7 +6,6 @@
 --   order_purchase_timestamp, order_approved_at,
 --   order_delivered_carrier_date, order_delivered_customer_date, order_estimated_delivery_date
 --
--- TODO: write the funnel query here.
 -- Expected output columns: stage, orders_reached, pct_of_total
 
 WITH totals AS (

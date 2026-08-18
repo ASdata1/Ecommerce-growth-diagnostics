@@ -4,7 +4,6 @@
 --
 -- Tables: orders (order_id, customer_id, order_purchase_timestamp)
 --
--- TODO: write the cohort retention query here.
 -- Expected output columns: cohort_month, months_since_first_order, customers_active, cohort_size, retention_pct
 
 
