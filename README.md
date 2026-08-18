@@ -1,4 +1,4 @@
-# Product Growth Analytics
+# Ecommerce Growth Diagnostics
 
 A small end-to-end analytics project: take messy raw order data, turn it into a clean queryable
 database, and use SQL to answer the kind of funnel, retention, and segmentation questions a
