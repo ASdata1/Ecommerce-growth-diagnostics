@@ -6,12 +6,6 @@
 --   order_purchase_timestamp, order_approved_at,
 --   order_delivered_carrier_date, order_delivered_customer_date, order_estimated_delivery_date
 --
--- Hint: order_status already tells you the LATEST stage an order reached, but that alone won't
--- give you a clean funnel (statuses aren't strictly ordered in the raw data). A simpler and more
--- honest approach: use the timestamp columns directly - an order "reached" a stage if that
--- stage's timestamp/date column is not null. Count non-null timestamps per stage, divide by
--- total orders.
---
 -- TODO: write the funnel query here.
 -- Expected output columns: stage, orders_reached, pct_of_total
 

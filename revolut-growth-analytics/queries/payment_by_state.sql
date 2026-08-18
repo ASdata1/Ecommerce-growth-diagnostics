@@ -12,7 +12,7 @@ SELECT
     c.customer_state,
     ROUND(AVG(p.payment_value), 2) AS avg_payment_val,
     COUNT(o.order_id) AS num_orders,
-    ROUND(AVG(p.payment_installments)) AS avg_payment_instals
+    ROUND(AVG(p.payment_installments),1) AS avg_payment_instals
     FROM orders o
     JOIN customers c
         ON o.customer_id = c.customer_id
