@@ -1,8 +1,6 @@
 """
 Sanity checks on the ETL output. Run with: pytest tests/
 
-These are intentionally minimal - the point is to have SOME automated check that the pipeline
-didn't silently break, not to test every edge case.
 """
 
 import sqlite3
@@ -45,13 +43,13 @@ def test_load_customers_no_null_customer_id():
     df = src.etl.load_customers()
     assert df["customer_id"].isnull().sum() == 0
 
-# every order_id in order_items must also exist in orders (referential integrity)
+# every order_id in order_items must also exist in orders 
 def test_order_id_integrity():
     orders_df = src.etl.load_orders()
     order_items_df = src.etl.load_order_items()
     assert order_items_df['order_id'].isin(orders_df['order_id']).all() == True
 
-# every customer_id in orders must also exist in customers (referential integrity)
+# every customer_id in orders must also exist in customers 
 def test_order_customer_id_integrity(conn):
     orphans = conn.execute("""
         SELECT COUNT(*) FROM orders o
