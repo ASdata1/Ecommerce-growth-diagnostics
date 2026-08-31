@@ -51,11 +51,11 @@ def test_order_id_integrity():
 
 # every customer_id in orders must also exist in customers 
 def test_order_customer_id_integrity(conn):
-    orphans = conn.execute("""
+    cust_ord_id = conn.execute("""
         SELECT COUNT(*) FROM orders o
         WHERE NOT EXISTS (
             SELECT 1 FROM customers c WHERE c.customer_id = o.customer_id   
         )
     """).fetchone()[0]
-    assert orphans == 0
+    assert cust_ord_id == 0
 
