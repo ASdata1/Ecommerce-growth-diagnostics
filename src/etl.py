@@ -40,6 +40,28 @@ def load_customers() -> pd.DataFrame:
     return df.drop_duplicates(subset=["customer_id"])
 
 
+def load_order_reviews() -> pd.DataFrame:
+    """Added for the repeat-purchase model: review_score is a candidate driver
+    of whether a first-time customer comes back."""
+    df = pd.read_csv(RAW_DIR / "olist_order_reviews_dataset.csv")
+    df = df.dropna(subset=["order_id"])
+    # a small number of orders have more than one review row (resubmitted
+    # review) - keep the most recent one per order
+    date_cols = [c for c in df.columns if "date" in c]
+    for col in date_cols:
+        df[col] = pd.to_datetime(df[col], errors="coerce")
+    df = df.sort_values("review_creation_date").drop_duplicates(subset=["order_id"], keep="last")
+    return df
+
+
+def load_products() -> pd.DataFrame:
+    """Added for the repeat-purchase model: product_category_name is a candidate
+    feature (some categories may retain customers better than others)."""
+    df = pd.read_csv(RAW_DIR / "olist_products_dataset.csv")
+    df = df.dropna(subset=["product_id"])
+    return df.drop_duplicates(subset=["product_id"])
+
+
 def main() -> None:
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     tables = {
@@ -47,6 +69,8 @@ def main() -> None:
         "order_items": load_order_items(),
         "order_payments": load_order_payments(),
         "customers": load_customers(),
+        "order_reviews": load_order_reviews(),
+        "products": load_products(),
     }
 
     with sqlite3.connect(DB_PATH) as conn:
@@ -63,6 +87,8 @@ def main() -> None:
         conn.execute("CREATE INDEX IF NOT EXISTS idx_order_payments_order_id ON order_payments(order_id)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_customers_customer_id ON customers(customer_id)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_customers_customer_unique_id ON customers(customer_unique_id)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_order_reviews_order_id ON order_reviews(order_id)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_products_product_id ON products(product_id)")
 
     print(f"\ndone -> {DB_PATH}")
 
