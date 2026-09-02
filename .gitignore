@@ -1,5 +1,6 @@
 data/raw/
 data/*.db
+data/olist_geolocation_dataset.csv
 .ipynb_checkpoints/
 __pycache__/
 *.pyc
