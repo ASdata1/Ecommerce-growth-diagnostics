@@ -23,6 +23,19 @@ Questions 1–3 are each answered with a SQL query, a chart, and a short written
 [`notebooks/analysis.ipynb`](notebooks/analysis.ipynb). Question 4 has its own EDA notebook and
 analysis script (see *How it's built* below).
 
+## Result
+
+| Metric | Model | Baseline |
+|---|---|---|
+| ROC-AUC | 0.59 | 0.50 (random) |
+| PR-AUC | 0.052 | 0.033 (base rate) |
+| Top-10% decile capture | 18% of repeaters (1.8x lift) | 10% (random) |
+| Top-20% decile capture | 31% of repeaters | 20% (random) |
+
+Repeat purchase is rare (3.3% of 83,644 first-time customers) and only
+weakly predictable from first-order data — not a reliable classifier,
+but useful for ranking/targeting.
+
 ## The data
 
 [Olist Brazilian E-Commerce Public Dataset](https://www.kaggle.com/datasets/olistbr/brazilian-ecommerce)
@@ -75,6 +88,8 @@ are used:
 
 ## Headline findings
 
+
+
 - The funnel is healthy end-to-end (97% of orders reach `delivered`), but the single biggest
   stage-to-stage drop is **approved → shipped**, not payment approval or last-mile delivery.
 - Repeat purchase is the real growth problem: month-1 cohort retention sits under 1% almost
@@ -118,7 +133,7 @@ Planned next steps:
   - **The causal question the model can't answer.** The odds ratios say fashion-accessory first
     orders repeat more; they don't say nudging customers toward that category would raise repeat
     purchase. Separating the two needs a randomised intervention, or an observational design that
-    names and adjusts for the likely confounders (product price, region-level income proxy,
+    names and adjusts for the likely confounders (product price, region-level income,
     seasonality).
   - **Targeting.** Who gets the intervention — e.g. the top deciles of the ranking model among
     customers still inside the censoring window — and the rationale for that cut.
