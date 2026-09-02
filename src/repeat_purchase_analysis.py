@@ -11,16 +11,14 @@ Why logistic regression specifically: the target (repeat_purchase) is
 binary, and the point of this script is not just "predict yes/no" but
 "which factors matter, and by how much" - logistic regression's
 coefficients convert directly into odds ratios, which is the readable,
-defensible output a business stakeholder can act on ("a 1-star review
-roughly halves the odds of a repeat purchase"), unlike a black-box model.
+defensible output a business stakeholder can act on
 
 Class imbalance, stated up front: repeat purchase is rare in this
 dataset (see the EDA notebook / cohort_retention.sql finding). That means:
   - accuracy is a useless headline metric - PR-AUC and recall are used instead
   - class_weight="balanced" is used so the rare positive class isn't
     ignored during training
-  - if PR-AUC comes back close to the base rate, that's a legitimate,
-    honest finding, not something to tune away
+  
 
 Validation strategy: a single 80/20 train/test split, with 5-fold
 STRATIFIED cross-validation *inside* the training set for the one model
@@ -44,8 +42,7 @@ to explain to a stakeholder, so the bar to include them is deliberately high.
 Run: python src/repeat_purchase_analysis.py
 (after src/etl.py has been run, so data/olist.db exists and includes the
 order_reviews and products tables, and after the EDA notebook has been
-reviewed - that notebook is where the decision to NOT use a review-missing
-flag as a feature was made and recorded)
+reviewed.
 """
 
 from pathlib import Path
@@ -72,6 +69,9 @@ from sklearn.preprocessing import OneHotEncoder, PolynomialFeatures, StandardSca
 from db import get_engine
 
 QUERY_PATH = Path(__file__).resolve().parent.parent / "queries" / "repeat_purchase_features.sql"
+CANDIDATES_QUERY_PATH = (
+    Path(__file__).resolve().parent.parent / "queries" / "repeat_purchase_scoring_candidates.sql"
+)
 
 NUMERIC_FEATURES = [
     "num_items",
@@ -89,11 +89,9 @@ CATEGORICAL_FEATURES = ["customer_state", "payment_type", "product_category"]
 TARGET = "repeat_purchase"
 
 
-def load_features() -> pd.DataFrame:
-    engine = get_engine()
-    # Date handling differs by dialect (SQLite julianday()/date(x, '-3 months')
-    # vs Postgres interval arithmetic on ::timestamp casts), so the query ships
-    # in two synced variants - pick by the engine's dialect.
+def load_features(engine=None) -> pd.DataFrame:
+    engine = engine or get_engine()
+ 
     query_path = QUERY_PATH
     if engine.dialect.name == "postgresql":
         query_path = QUERY_PATH.with_name("repeat_purchase_features.postgres.sql")
@@ -105,9 +103,9 @@ def run_hypothesis_tests(df: pd.DataFrame) -> None:
 
     # H1: mean review score differs between repeat and one-time customers (among
     # customers who left one the model can use - review_score is the gated column,
-    # so this compares one-timers against repeaters' pre-second-order reviews)
-    repeat_scores = df.loc[df[TARGET] == 1, "review_score"].dropna()
-    one_time_scores = df.loc[df[TARGET] == 0, "review_score"].dropna()
+    # so this compares one-timers against repeaters' 
+    repeat_scores = df.loc[df[TARGET] == 1, "review_score"].dropna() 
+    one_time_scores = df.loc[df[TARGET] == 0, "review_score"].dropna()  
     t_stat, p_val = ttest_ind(repeat_scores, one_time_scores, equal_var=False)  # Welch's t-test
     print(
         f"Review score, repeat (n={len(repeat_scores)}, mean={repeat_scores.mean():.2f}) "
@@ -153,7 +151,7 @@ def cross_validate_pr_auc(interaction_terms: bool, X: pd.DataFrame, y: pd.Series
     train-fold vs validation-fold gap as an overfitting check. Builds a fresh
     pipeline per fold (rather than cloning one passed in) so there's no risk of
     fold N reusing a fitted transformer from fold N-1."""
-    skf = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
+    skf = StratifiedKFold(n_splits=5, shuffle=True, random_state=42) # use statified folds to maintain class distbution in each fold
     train_scores, val_scores = [], []
 
     for train_idx, val_idx in skf.split(X, y):
@@ -192,7 +190,7 @@ def likelihood_ratio_test(X_train: pd.DataFrame, y_train: pd.Series) -> None:
     model_base = sm.Logit(y_train.to_numpy(), X_base).fit(disp=0)
     model_interact = sm.Logit(y_train.to_numpy(), X_interact).fit(disp=0)
 
-    lr_stat = 2 * (model_interact.llf - model_base.llf)
+    lr_stat = 2 * (model_interact.llf - model_base.llf) #log liklihood ratio stat
     df_diff = X_interact.shape[1] - X_base.shape[1]
     p_value = chi2_dist.sf(lr_stat, df_diff)
 
@@ -206,7 +204,23 @@ def likelihood_ratio_test(X_train: pd.DataFrame, y_train: pd.Series) -> None:
         print("-> not a statistically significant improvement - stick with the simpler model.")
 
 
-def evaluate_on_test(pipeline: Pipeline, X_train, y_train, X_test, y_test, label: str) -> None:
+def _rank_and_decile(scores: pd.DataFrame) -> pd.DataFrame:
+    """Adds a 1-based rank and decile (1 = top 10% by repeat_probability, 10 =
+    bottom 10%) to a table already sorted descending by repeat_probability.
+    Rank-based rather than pd.qcut so duplicate probabilities - common here,
+    since several features are categorical - can't raise qcut's "duplicate
+    bin edges" error.
+    """
+    scores = scores.reset_index(drop=True)
+    n = len(scores)
+    scores["rank"] = np.arange(1, n + 1)
+    scores["decile"] = np.arange(n) * 10 // n + 1
+    return scores
+
+
+def evaluate_on_test(
+    pipeline: Pipeline, X_train, y_train, X_test, y_test, ids_test: pd.Series, label: str, engine
+) -> None:
     print(f"\n=== Final held-out test evaluation: {label} ===")
     baseline = DummyClassifier(strategy="most_frequent").fit(X_train, y_train)
     print("--- Baseline (always predict majority class) ---")
@@ -232,7 +246,71 @@ def evaluate_on_test(pipeline: Pipeline, X_train, y_train, X_test, y_test, label
             f"of actual repeat purchasers, vs {int(top_pct * 100)}% expected at random."
         )
 
+    # Persist the ranked, per-customer scores behind that lift stat - the actual
+    # list a stakeholder needs to see who's "in the top 10%", not just the
+    # aggregate capture rate above. This is the held-out TEST set: outcomes here
+    # are already known, so it validates the ranking rather than being a live
+    # call list - see score_scoring_candidates() for the list to actually act on.
+    scored_test = _rank_and_decile(
+        pd.DataFrame({
+            "customer_unique_id": ids_test.to_numpy(),
+            "repeat_probability": y_proba,
+            "actual_repeat_purchase": y_test.to_numpy(),
+        }).sort_values("repeat_probability", ascending=False)
+    )
+    scored_test.to_sql(
+        "repeat_purchase_test_scores", engine, if_exists="replace", index=False, chunksize=1000, method="multi"
+    )
+    print(f"\nWrote {len(scored_test):,} scored test-set customers -> repeat_purchase_test_scores")
+
     print_odds_ratios(pipeline)
+
+
+def score_scoring_candidates(X: pd.DataFrame, y: pd.Series, interaction_terms: bool, engine) -> None:
+    """Score the customers repeat_purchase_features.sql's right-censoring cutoff
+    excludes: first-time buyers too recent to know yet whether they'll place a
+    second order. This - not the test-set lift numbers in evaluate_on_test - is
+    the actual live outreach candidate list, written out as a ranked,
+    per-customer table rather than only an aggregate stat.
+
+    Refits on ALL labelled data (train + test): evaluate_on_test has already
+    reported the held-out numbers, so there's no more leakage risk to protect -
+    the deployed model should use every labelled row available.
+    """
+    query_path = CANDIDATES_QUERY_PATH
+    if engine.dialect.name == "postgresql":
+        query_path = CANDIDATES_QUERY_PATH.with_name("repeat_purchase_scoring_candidates.postgres.sql")
+    candidates = pd.read_sql(query_path.read_text(), engine)
+
+    if candidates.empty:
+        print(
+            "\nNo live scoring candidates found (no first-time customers inside "
+            "the right-censoring window) - skipping repeat_purchase_scoring_candidates."
+        )
+        return
+
+    deploy_pipeline = build_pipeline(interaction_terms=interaction_terms)
+    deploy_pipeline.fit(X, y)
+    proba = deploy_pipeline.predict_proba(candidates[NUMERIC_FEATURES + CATEGORICAL_FEATURES])[:, 1]
+
+    scored = _rank_and_decile(
+        pd.DataFrame({
+            "customer_unique_id": candidates["customer_unique_id"].to_numpy(),
+            "repeat_probability": proba,
+        }).sort_values("repeat_probability", ascending=False)
+    )
+    scored.to_sql(
+        "repeat_purchase_scoring_candidates",
+        engine,
+        if_exists="replace",
+        index=False,
+        chunksize=1000,
+        method="multi",
+    )
+    print(
+        f"\nScored {len(scored):,} live outreach candidates -> repeat_purchase_scoring_candidates table "
+        f"({(scored['decile'] == 1).sum():,} in the top decile)"
+    )
 
 
 def print_odds_ratios(pipeline: Pipeline) -> None:
@@ -241,18 +319,20 @@ def print_odds_ratios(pipeline: Pipeline) -> None:
     odds_ratios = pd.Series(np.exp(model.coef_[0]), index=feature_names).sort_values()
     print("\n--- Odds ratios (>1 = associated with higher repeat-purchase odds) ---")
     print(pd.concat([odds_ratios.head(5), odds_ratios.tail(5)]).round(3))
-    print("(cross-check these against the statsmodels p-values/CIs above before reading too much")
-    print(" into any single coefficient - sklearn gives point estimates only, no significance.)")
 
 
 def main() -> None:
-    df = load_features()
+    engine = get_engine()
+    df = load_features(engine)
     print(f"Loaded {len(df):,} first-time customers, {df[TARGET].sum():,} repeat purchasers")
     run_hypothesis_tests(df)
 
     X = df[NUMERIC_FEATURES + CATEGORICAL_FEATURES]
     y = df[TARGET]
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, stratify=y, random_state=42)
+    ids = df["customer_unique_id"]
+    X_train, X_test, y_train, y_test, ids_train, ids_test = train_test_split(
+        X, y, ids, test_size=0.2, stratify=y, random_state=42
+    )
 
     print("\n=== Cross-validation (train set only) ===")
     base_cv = cross_validate_pr_auc(False, X_train, y_train, "Base features")
@@ -270,7 +350,8 @@ def main() -> None:
         print(f"\nCV PR-AUC did not clearly favour interaction terms ({interact_cv:.3f} vs {base_cv:.3f}) "
               "- keeping the simpler, interpretable model.")
 
-    evaluate_on_test(chosen, X_train, y_train, X_test, y_test, label)
+    evaluate_on_test(chosen, X_train, y_train, X_test, y_test, ids_test, label, engine)
+    score_scoring_candidates(X, y, use_interactions, engine)
 
 
 if __name__ == "__main__":
