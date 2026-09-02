@@ -67,6 +67,7 @@ from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OneHotEncoder, PolynomialFeatures, StandardScaler
 
 from db import get_engine
+from experiment_tracking import track_run
 
 QUERY_PATH = Path(__file__).resolve().parent.parent / "queries" / "repeat_purchase_features.sql"
 CANDIDATES_QUERY_PATH = (
@@ -168,7 +169,7 @@ def cross_validate_pr_auc(interaction_terms: bool, X: pd.DataFrame, y: pd.Series
     return val_mean # type: ignore
 
 
-def likelihood_ratio_test(X_train: pd.DataFrame, y_train: pd.Series) -> None:
+def likelihood_ratio_test(X_train: pd.DataFrame, y_train: pd.Series) -> float:
     """Fits nested models in statsmodels to get a proper LR test:
     is the interaction model's improvement in fit statistically significant, or
     just noise? 
@@ -202,6 +203,7 @@ def likelihood_ratio_test(X_train: pd.DataFrame, y_train: pd.Series) -> None:
         print("   trading away interpretability for it.")
     else:
         print("-> not a statistically significant improvement - stick with the simpler model.")
+    return p_value
 
 
 def _rank_and_decile(scores: pd.DataFrame) -> pd.DataFrame:
@@ -220,7 +222,7 @@ def _rank_and_decile(scores: pd.DataFrame) -> pd.DataFrame:
 
 def evaluate_on_test(
     pipeline: Pipeline, X_train, y_train, X_test, y_test, ids_test: pd.Series, label: str, engine
-) -> None:
+) -> dict:
     print(f"\n=== Final held-out test evaluation: {label} ===")
     baseline = DummyClassifier(strategy="most_frequent").fit(X_train, y_train)
     print("--- Baseline (always predict majority class) ---")
@@ -232,17 +234,22 @@ def evaluate_on_test(
 
     print(f"--- {label} ---")
     print(classification_report(y_test, y_pred, zero_division=0))
-    print(f"ROC-AUC: {roc_auc_score(y_test, y_proba):.3f}")
-    print(f"PR-AUC (average precision): {average_precision_score(y_test, y_proba):.3f}")
+    roc_auc = roc_auc_score(y_test, y_proba)
+    pr_auc = average_precision_score(y_test, y_proba)
+    print(f"ROC-AUC: {roc_auc:.3f}")
+    print(f"PR-AUC (average precision): {pr_auc:.3f}")
     print(f"Confusion matrix:\n{confusion_matrix(y_test, y_pred)}")
 
+    metrics = {"roc_auc": roc_auc, "pr_auc": pr_auc}
     for top_pct in (0.1, 0.2):
         n = int(len(y_test) * top_pct)
         top_idx = np.argsort(-y_proba)[:n]
         captured = y_test.iloc[top_idx].sum()
+        capture_rate = 100 * captured / max(y_test.sum(), 1)
+        metrics[f"top_{int(top_pct * 100)}pct_capture_rate"] = capture_rate
         print(
             f"Targeting the top {int(top_pct * 100)}% highest-scored customers "
-            f"captures {captured}/{y_test.sum()} ({100 * captured / max(y_test.sum(), 1):.1f}%) "
+            f"captures {captured}/{y_test.sum()} ({capture_rate:.1f}%) "
             f"of actual repeat purchasers, vs {int(top_pct * 100)}% expected at random."
         )
 
@@ -264,6 +271,7 @@ def evaluate_on_test(
     print(f"\nWrote {len(scored_test):,} scored test-set customers -> repeat_purchase_test_scores")
 
     print_odds_ratios(pipeline)
+    return metrics
 
 
 def score_scoring_candidates(X: pd.DataFrame, y: pd.Series, interaction_terms: bool, engine) -> None:
@@ -335,10 +343,23 @@ def main() -> None:
     )
 
     print("\n=== Cross-validation (train set only) ===")
-    base_cv = cross_validate_pr_auc(False, X_train, y_train, "Base features")
-    interact_cv = cross_validate_pr_auc(True, X_train, y_train, "+ Interaction terms")
+    # Feature set is logged with every run: when geolocation/seller features get
+    # added to NUMERIC_FEATURES/CATEGORICAL_FEATURES, this is what makes a later
+    # run's metrics comparable (or not) to this one - see experiment_tracking.py.
+    feature_config = {
+        "numeric_features": ",".join(NUMERIC_FEATURES),
+        "categorical_features": ",".join(CATEGORICAL_FEATURES),
+    }
 
-    likelihood_ratio_test(X_train, y_train)
+    with track_run("cv-base-features", params={**feature_config, "interaction_terms": False}) as log:
+        base_cv = cross_validate_pr_auc(False, X_train, y_train, "Base features")
+        log({"cv_pr_auc": base_cv})
+
+    lr_p_value = likelihood_ratio_test(X_train, y_train)
+
+    with track_run("cv-interaction-terms", params={**feature_config, "interaction_terms": True}) as log:
+        interact_cv = cross_validate_pr_auc(True, X_train, y_train, "+ Interaction terms")
+        log({"cv_pr_auc": interact_cv, "lr_test_p_value": lr_p_value})
 
     # Decision: default to the simpler model unless interactions clearly win on
     # BOTH the predictive (CV PR-AUC) and inferential (LR test) check - see the
@@ -350,7 +371,19 @@ def main() -> None:
         print(f"\nCV PR-AUC did not clearly favour interaction terms ({interact_cv:.3f} vs {base_cv:.3f}) "
               "- keeping the simpler, interpretable model.")
 
-    evaluate_on_test(chosen, X_train, y_train, X_test, y_test, ids_test, label, engine)
+    with track_run(
+        "final-evaluation",
+        params={
+            **feature_config,
+            "interaction_terms": use_interactions,
+            "model": label,
+            "n_customers": len(df),
+            "base_rate": round(float(y.mean()), 4),
+        },
+    ) as log:
+        final_metrics = evaluate_on_test(chosen, X_train, y_train, X_test, y_test, ids_test, label, engine)
+        log(final_metrics)
+
     score_scoring_candidates(X, y, use_interactions, engine)
 
 

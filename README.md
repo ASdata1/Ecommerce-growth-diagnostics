@@ -79,7 +79,11 @@ are used:
    (Welch's t-test, chi-square) and a logistic regression predicting repeat purchase: 5-fold
    stratified cross-validation on the training set, a likelihood-ratio test (via `statsmodels`)
    comparing plain features against added interaction terms, and odds ratios for interpretability
-   on the held-out test set. See the module docstring for the full reasoning.
+   on the held-out test set. See the module docstring for the full reasoning. Every CV comparison
+   and the final held-out evaluation are logged to MLflow via
+   [`src/experiment_tracking.py`](src/experiment_tracking.py) — each run is tagged with the git
+   commit it ran on and the exact feature set used, so a metric quoted anywhere is traceable back
+   to what produced it. Run `mlflow ui` from the project root to browse past runs.
 7. [`power_bi/`](power_bi) — dashboard connected to the cloud database. See
    [`power_bi/README.md`](power_bi/README.md) for setup and page layout.
 8. [`tests/`](tests) — data-quality checks on the ETL output (`test_etl.py`) and sanity checks
@@ -87,8 +91,6 @@ are used:
    cutoff and an independent recompute of the `review_score` 30-day timing gate.
 
 ## Headline findings
-
-
 
 - The funnel is healthy end-to-end (97% of orders reach `delivered`), but the single biggest
   stage-to-stage drop is **approved → shipped**, not payment approval or last-mile delivery.
@@ -120,9 +122,10 @@ are used:
 The analysis so far is diagnostic, not causal, and nothing is wired into a live workflow yet.
 Planned next steps:
 
-- **Experiment tracking with MLflow.** Log each model run's inputs (feature set, feature-query
-  version, censoring cutoff), parameters, and metrics (ROC-AUC, PR-AUC, top-decile lift, LR-test
-  p-value) so feature and preprocessing changes are compared run-over-run instead of from memory.
+- **~~Experiment tracking with MLflow~~ — in place.** Every CV run and the final held-out
+  evaluation log their feature set, config, and metrics to MLflow, tagged with the git commit
+  they ran on (see `src/experiment_tracking.py`). Set up now, ahead of the geolocation/seller
+  feature work below, so that comparison is a real run-over-run diff instead of "from memory."
 
 - **More features from the geolocation and seller data.** Fold `olist_geolocation_dataset.csv` and
   `olist_sellers_dataset.csv` into the feature query — customer↔seller distance, seller state,
