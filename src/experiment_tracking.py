@@ -24,7 +24,7 @@ import mlflow
 EXPERIMENT_NAME = "repeat-purchase-propensity"
 
 
-def _git_commit() -> str:
+def git_commit() -> str:
     """The commit the run actually executed on. Falls back to "unknown" rather
     than raising, so a missing git binary never takes down an analysis run -
     tracking is meant to help, not become a new point of failure."""
@@ -51,6 +51,6 @@ def track_run(run_name: str, params: dict[str, Any]) -> Iterator[Any]:
     """
     mlflow.set_experiment(EXPERIMENT_NAME)
     with mlflow.start_run(run_name=run_name):
-        mlflow.set_tag("git_commit", _git_commit())
+        mlflow.set_tag("git_commit", git_commit())
         mlflow.log_params(params)
         yield mlflow.log_metrics

@@ -45,6 +45,7 @@ order_reviews and products tables, and after the EDA notebook has been
 reviewed.
 """
 
+from datetime import datetime, timezone
 from pathlib import Path
 
 import numpy as np
@@ -67,7 +68,7 @@ from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OneHotEncoder, PolynomialFeatures, StandardScaler
 
 from db import get_engine
-from experiment_tracking import track_run
+from experiment_tracking import git_commit, track_run
 
 QUERY_PATH = Path(__file__).resolve().parent.parent / "queries" / "repeat_purchase_features.sql"
 CANDIDATES_QUERY_PATH = (
@@ -99,8 +100,11 @@ def load_features(engine=None) -> pd.DataFrame:
     return pd.read_sql(query_path.read_text(), engine)
 
 
-def run_hypothesis_tests(df: pd.DataFrame) -> None:
+def run_hypothesis_tests(df: pd.DataFrame) -> list[dict]:
+    """Runs the two first-order hypothesis tests, prints them as before, and
+    returns one row per test for write_dashboard_tables() to persist."""
     print("\n=== Hypothesis tests ===")
+    rows: list[dict] = []
 
     # H1: mean review score differs between repeat and one-time customers (among
     # customers who left one the model can use - review_score is the gated column,
@@ -108,17 +112,53 @@ def run_hypothesis_tests(df: pd.DataFrame) -> None:
     repeat_scores = df.loc[df[TARGET] == 1, "review_score"].dropna() 
     one_time_scores = df.loc[df[TARGET] == 0, "review_score"].dropna()  
     t_stat, p_val = ttest_ind(repeat_scores, one_time_scores, equal_var=False)  # Welch's t-test
-    print(
-        f"Review score, repeat (n={len(repeat_scores)}, mean={repeat_scores.mean():.2f}) "
-        f"vs one-time (n={len(one_time_scores)}, mean={one_time_scores.mean():.2f}): "
-        f"t={t_stat:.2f}, p={p_val:.4f}"
+    # pooled-SD Cohen's d, so the effect size sits next to the p-value on the
+    # dashboard - the finding is "significant but trivial" and the size is the point.
+    n1, n2 = len(repeat_scores), len(one_time_scores)
+    pooled_sd = np.sqrt(
+        ((n1 - 1) * repeat_scores.var() + (n2 - 1) * one_time_scores.var()) / (n1 + n2 - 2)
     )
+    cohens_d = (repeat_scores.mean() - one_time_scores.mean()) / pooled_sd
+    print(
+        f"Review score, repeat (n={n1}, mean={repeat_scores.mean():.2f}) "
+        f"vs one-time (n={n2}, mean={one_time_scores.mean():.2f}): "
+        f"t={t_stat:.2f}, p={p_val:.4f}, Cohen's d={cohens_d:.3f}"
+    )
+    rows.append({
+        "hypothesis": "Review score differs: repeat vs one-time buyers",
+        "test": "Welch's t-test",
+        "statistic_name": "t",
+        "statistic": float(t_stat),
+        "p_value": float(p_val),
+        "dof": None,
+        "effect_size_name": "Cohen's d",
+        "effect_size": float(cohens_d),
+        "significant_05": bool(p_val < 0.05),
+        "detail": (
+            f"repeat mean={repeat_scores.mean():.2f} (n={n1:,}) vs "
+            f"one-time mean={one_time_scores.mean():.2f} (n={n2:,})"
+        ),
+    })
 
     # H2: repeat-purchase rate differs by payment type
     contingency = pd.crosstab(df["payment_type"], df[TARGET])
     chi2_stat, p_val_chi2, dof, _ = chi2_contingency(contingency)
     print(f"\nPayment type vs repeat purchase: chi2={chi2_stat:.2f}, dof={dof}, p={p_val_chi2:.4f}")
     print(contingency.assign(repeat_rate_pct=lambda d: round(100 * d[1] / (d[0] + d[1]), 2)))
+    rows.append({
+        "hypothesis": "Repeat-purchase rate differs by payment type",
+        "test": "Chi-square test of independence",
+        "statistic_name": "chi2",
+        "statistic": float(chi2_stat),
+        "p_value": float(p_val_chi2),
+        "dof": float(dof),
+        "effect_size_name": None,
+        "effect_size": None,
+        "significant_05": bool(p_val_chi2 < 0.05),
+        "detail": f"{contingency.shape[0]} payment types compared",
+    })
+
+    return rows
 
 
 def build_pipeline(interaction_terms: bool) -> Pipeline:
@@ -169,10 +209,13 @@ def cross_validate_pr_auc(interaction_terms: bool, X: pd.DataFrame, y: pd.Series
     return val_mean # type: ignore
 
 
-def likelihood_ratio_test(X_train: pd.DataFrame, y_train: pd.Series) -> float:
+def likelihood_ratio_test(X_train: pd.DataFrame, y_train: pd.Series) -> tuple[float, dict]:
     """Fits nested models in statsmodels to get a proper LR test:
     is the interaction model's improvement in fit statistically significant, or
-    just noise? 
+    just noise?
+
+    Returns (p_value, row) - the row is persisted alongside the two hypothesis
+    tests so the dashboard can show why interaction terms were or weren't kept.
     """
     print("\n=== Likelihood-ratio test: base numeric features vs. + their pairwise interactions ===")
 
@@ -203,7 +246,23 @@ def likelihood_ratio_test(X_train: pd.DataFrame, y_train: pd.Series) -> float:
         print("   trading away interpretability for it.")
     else:
         print("-> not a statistically significant improvement - stick with the simpler model.")
-    return p_value
+
+    row = {
+        "hypothesis": "Pairwise numeric interactions improve model fit",
+        "test": "Likelihood-ratio test",
+        "statistic_name": "LR chi2",
+        "statistic": float(lr_stat),
+        "p_value": float(p_value),
+        "dof": float(df_diff),
+        "effect_size_name": None,
+        "effect_size": None,
+        "significant_05": bool(p_value < 0.05),
+        "detail": (
+            f"base log-likelihood={model_base.llf:.1f} ({X_base.shape[1]} params) vs "
+            f"+interactions={model_interact.llf:.1f} ({X_interact.shape[1]} params)"
+        ),
+    }
+    return float(p_value), row
 
 
 def _rank_and_decile(scores: pd.DataFrame) -> pd.DataFrame:
@@ -222,7 +281,7 @@ def _rank_and_decile(scores: pd.DataFrame) -> pd.DataFrame:
 
 def evaluate_on_test(
     pipeline: Pipeline, X_train, y_train, X_test, y_test, ids_test: pd.Series, label: str, engine
-) -> dict:
+) -> tuple[dict, pd.DataFrame]:
     print(f"\n=== Final held-out test evaluation: {label} ===")
     baseline = DummyClassifier(strategy="most_frequent").fit(X_train, y_train)
     print("--- Baseline (always predict majority class) ---")
@@ -270,8 +329,8 @@ def evaluate_on_test(
     )
     print(f"\nWrote {len(scored_test):,} scored test-set customers -> repeat_purchase_test_scores")
 
-    print_odds_ratios(pipeline)
-    return metrics
+    odds_df = odds_ratio_table(pipeline)
+    return metrics, odds_df
 
 
 def score_scoring_candidates(X: pd.DataFrame, y: pd.Series, interaction_terms: bool, engine) -> None:
@@ -321,19 +380,73 @@ def score_scoring_candidates(X: pd.DataFrame, y: pd.Series, interaction_terms: b
     )
 
 
-def print_odds_ratios(pipeline: Pipeline) -> None:
+def odds_ratio_table(pipeline: Pipeline) -> pd.DataFrame:
+    """Per-feature odds ratios from the fitted logistic model. Prints the 5
+    strongest each way for the console reader; returns EVERY feature as a
+    DataFrame so write_dashboard_tables() can persist the full set (Power BI
+    does its own Top-N on the bar chart)."""
     model = pipeline.named_steps["model"]
     feature_names = pipeline.named_steps["preprocess"].get_feature_names_out()
-    odds_ratios = pd.Series(np.exp(model.coef_[0]), index=feature_names).sort_values()
+    coef = model.coef_[0]
+    table = (
+        pd.DataFrame({
+            # drop the ColumnTransformer's "num__"/"cat__" prefixes - they carry
+            # nothing the chart needs and make the axis labels unreadable
+            "feature": pd.Series(feature_names).str.replace(r"(num|cat)__", "", regex=True),
+            "coefficient": coef,
+            "odds_ratio": np.exp(coef),
+            "abs_coefficient": np.abs(coef),
+            "direction": np.where(coef >= 0, "higher repeat odds", "lower repeat odds"),
+        })
+        .sort_values("coefficient")
+        .reset_index(drop=True)
+    )
     print("\n--- Odds ratios (>1 = associated with higher repeat-purchase odds) ---")
-    print(pd.concat([odds_ratios.head(5), odds_ratios.tail(5)]).round(3))
+    print(
+        pd.concat([table.head(5), table.tail(5)])[["feature", "odds_ratio"]]
+        .round(3)
+        .to_string(index=False)
+    )
+    return table
+
+
+def write_dashboard_tables(
+    engine, hypothesis_rows: list[dict], odds_df: pd.DataFrame, metrics_row: dict
+) -> None:
+    """Persist the model's headline results as three small tables in the same DB
+    the per-customer score tables go to, so the Power BI "Repeat-purchase
+    drivers" page binds to them directly instead of pasting console output:
+
+      repeat_purchase_odds_ratios     - one row per model feature (bar chart)
+      repeat_purchase_hypothesis_tests - one row per test, with p-values
+      repeat_purchase_model_metrics    - single row of headline metrics (KPI cards)
+
+    if_exists="replace" (like repeat_purchase_test_scores) - the dashboard shows
+    the latest run. Every row carries run_at + git_commit, so this can be
+    switched to "append" for run-over-run history without a schema change.
+    """
+    run_at = datetime.now(timezone.utc)
+    commit = metrics_row["git_commit"]
+
+    frames = {
+        "repeat_purchase_odds_ratios": odds_df.assign(
+            model=metrics_row["model"], run_at=run_at, git_commit=commit
+        ),
+        "repeat_purchase_hypothesis_tests": pd.DataFrame(hypothesis_rows).assign(
+            run_at=run_at, git_commit=commit
+        ),
+        "repeat_purchase_model_metrics": pd.DataFrame([{**metrics_row, "run_at": run_at}]),
+    }
+    for name, frame in frames.items():
+        frame.to_sql(name, engine, if_exists="replace", index=False)
+        print(f"Wrote {len(frame):,} row(s) -> {name}")
 
 
 def main() -> None:
     engine = get_engine()
     df = load_features(engine)
     print(f"Loaded {len(df):,} first-time customers, {df[TARGET].sum():,} repeat purchasers")
-    run_hypothesis_tests(df)
+    hypothesis_rows = run_hypothesis_tests(df)
 
     X = df[NUMERIC_FEATURES + CATEGORICAL_FEATURES]
     y = df[TARGET]
@@ -355,7 +468,8 @@ def main() -> None:
         base_cv = cross_validate_pr_auc(False, X_train, y_train, "Base features")
         log({"cv_pr_auc": base_cv})
 
-    lr_p_value = likelihood_ratio_test(X_train, y_train)
+    lr_p_value, lr_row = likelihood_ratio_test(X_train, y_train)
+    hypothesis_rows.append(lr_row)
 
     with track_run("cv-interaction-terms", params={**feature_config, "interaction_terms": True}) as log:
         interact_cv = cross_validate_pr_auc(True, X_train, y_train, "+ Interaction terms")
@@ -381,8 +495,27 @@ def main() -> None:
             "base_rate": round(float(y.mean()), 4),
         },
     ) as log:
-        final_metrics = evaluate_on_test(chosen, X_train, y_train, X_test, y_test, ids_test, label, engine)
+        final_metrics, odds_df = evaluate_on_test(
+            chosen, X_train, y_train, X_test, y_test, ids_test, label, engine
+        )
         log(final_metrics)
+
+    metrics_row = {
+        "model": label,
+        "interaction_terms": use_interactions,
+        "n_customers": int(len(df)),
+        "n_repeat": int(df[TARGET].sum()),
+        "base_rate": round(float(y.mean()), 4),
+        "cv_pr_auc_base": round(float(base_cv), 4),
+        "cv_pr_auc_interactions": round(float(interact_cv), 4),
+        "lr_test_p_value": float(lr_p_value),
+        "roc_auc": round(float(final_metrics["roc_auc"]), 4),
+        "pr_auc": round(float(final_metrics["pr_auc"]), 4),
+        "top_10pct_capture_rate": round(float(final_metrics["top_10pct_capture_rate"]), 2),
+        "top_20pct_capture_rate": round(float(final_metrics["top_20pct_capture_rate"]), 2),
+        "git_commit": git_commit(),
+    }
+    write_dashboard_tables(engine, hypothesis_rows, odds_df, metrics_row)
 
     score_scoring_candidates(X, y, use_interactions, engine)
 

@@ -83,7 +83,12 @@ are used:
    and the final held-out evaluation are logged to MLflow via
    [`src/experiment_tracking.py`](src/experiment_tracking.py) — each run is tagged with the git
    commit it ran on and the exact feature set used, so a metric quoted anywhere is traceable back
-   to what produced it. Run `mlflow ui` from the project root to browse past runs.
+   to what produced it. Run `mlflow ui` from the project root to browse past runs. The run also
+   writes its headline results back to the database as three small tables —
+   `repeat_purchase_odds_ratios`, `repeat_purchase_hypothesis_tests`, and
+   `repeat_purchase_model_metrics` (latest run, each row stamped with `run_at` + `git_commit`) —
+   so the Power BI "Repeat-purchase drivers" page binds to them directly instead of pasting in
+   console output.
 7. [`power_bi/`](power_bi) — dashboard connected to the cloud database. See
    [`power_bi/README.md`](power_bi/README.md) for setup and page layout.
 8. [`tests/`](tests) — data-quality checks on the ETL output (`test_etl.py`) and sanity checks
