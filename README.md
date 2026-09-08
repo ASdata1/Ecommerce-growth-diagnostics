@@ -83,14 +83,14 @@ are used:
    and the final held-out evaluation are logged to MLflow via
    [`src/experiment_tracking.py`](src/experiment_tracking.py) — each run is tagged with the git
    commit it ran on and the exact feature set used, so a metric quoted anywhere is traceable back
-   to what produced it. Run `mlflow ui` from the project root to browse past runs. The run also
-   writes its headline results back to the database as three small tables —
-   `repeat_purchase_odds_ratios`, `repeat_purchase_hypothesis_tests`, and
-   `repeat_purchase_model_metrics` (latest run, each row stamped with `run_at` + `git_commit`) —
-   so the Power BI "Repeat-purchase drivers" page binds to them directly instead of pasting in
-   console output.
-7. [`power_bi/`](power_bi) — dashboard connected to the cloud database. See
-   [`power_bi/README.md`](power_bi/README.md) for setup and page layout.
+   to what produced it; past runs are browsable in the MLflow UI. The run also writes its
+   headline results — odds ratios, hypothesis-test p-values, and the top-line metrics — back to
+   the database as three small tables (`repeat_purchase_odds_ratios`,
+   `repeat_purchase_hypothesis_tests`, `repeat_purchase_model_metrics`), each row stamped with
+   `run_at` and the git commit, for the dashboard to read.
+7. **Power BI dashboard** — reads the cloud Postgres database: the funnel, the cohort-retention
+   heatmap, the regional value/volume cut, and a repeat-purchase drivers page built from the
+   odds-ratio and hypothesis-test tables above.
 8. [`tests/`](tests) — data-quality checks on the ETL output (`test_etl.py`) and sanity checks
    on the model feature query (`test_repeat_purchase_features.py`), including the right-censoring
    cutoff and an independent recompute of the `review_score` 30-day timing gate.
