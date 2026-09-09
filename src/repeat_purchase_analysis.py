@@ -74,6 +74,8 @@ QUERY_PATH = Path(__file__).resolve().parent.parent / "queries" / "repeat_purcha
 CANDIDATES_QUERY_PATH = (
     Path(__file__).resolve().parent.parent / "queries" / "repeat_purchase_scoring_candidates.sql"
 )
+# flat-file copies of the dashboard tables, for Power BI when it can't reach Postgres directly
+EXPORT_DIR = Path(__file__).resolve().parent.parent / "power_bi" / "exports"
 
 NUMERIC_FEATURES = [
     "num_items",
@@ -421,6 +423,9 @@ def write_dashboard_tables(
       repeat_purchase_hypothesis_tests - one row per test, with p-values
       repeat_purchase_model_metrics    - single row of headline metrics (KPI cards)
 
+    Each is also written to power_bi/exports/<name>.csv, so Power BI can import
+    the flat files when it can't connect to Postgres directly.
+
     if_exists="replace" (like repeat_purchase_test_scores) - the dashboard shows
     the latest run. Every row carries run_at + git_commit, so this can be
     switched to "append" for run-over-run history without a schema change.
@@ -437,9 +442,11 @@ def write_dashboard_tables(
         ),
         "repeat_purchase_model_metrics": pd.DataFrame([{**metrics_row, "run_at": run_at}]),
     }
+    EXPORT_DIR.mkdir(parents=True, exist_ok=True)
     for name, frame in frames.items():
         frame.to_sql(name, engine, if_exists="replace", index=False)
-        print(f"Wrote {len(frame):,} row(s) -> {name}")
+        frame.to_csv(EXPORT_DIR / f"{name}.csv", index=False)
+        print(f"Wrote {len(frame):,} row(s) -> {name} (+ power_bi/exports/{name}.csv)")
 
 
 def main() -> None:
