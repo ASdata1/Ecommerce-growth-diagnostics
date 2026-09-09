@@ -3,8 +3,7 @@
 --
 
 -- Expected output columns: customer_state, num_orders, avg_order_value, avg_installments
--- Sort by avg_order_value descending. Consider filtering out states with very few orders
--- (e.g. HAVING num_orders >= 30) so the average isn't noise from 1-2 customers.
+-- Sort by avg_order_value descending. 
 
 
 SELECT

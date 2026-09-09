@@ -1,6 +1,6 @@
 -- Q2: COHORT RETENTION
 -- Group customers by the month of their FIRST order - their cohort
--- For each cohort, what % of customers placed another order in month 1, 2, 3... after that?
+-- For each cohort, what % of customers placed another order in month 1, 2, 3?
 --
 -- Tables: orders (order_id, customer_id, order_purchase_timestamp)
 --
