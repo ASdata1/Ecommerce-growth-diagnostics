@@ -87,10 +87,11 @@ are used:
    headline results — odds ratios, hypothesis-test p-values, and the top-line metrics — back to
    the database as three small tables (`repeat_purchase_odds_ratios`,
    `repeat_purchase_hypothesis_tests`, `repeat_purchase_model_metrics`), each row stamped with
-   `run_at` and the git commit, for the dashboard to read.
-7. **Power BI dashboard** — reads the cloud Postgres database: the funnel, the cohort-retention
-   heatmap, the regional value/volume cut, and a repeat-purchase drivers page built from the
-   odds-ratio and hypothesis-test tables above.
+   `run_at` and the git commit, and mirrored to `power_bi/exports/*.csv` for the dashboard.
+7. **Power BI dashboard** — built from the CSV exports in `power_bi/exports/`: the funnel, the
+   cohort-retention heatmap, the regional value/volume cut, and a repeat-purchase drivers page
+   from the odds-ratio and hypothesis-test tables above. Not yet assembled — see *Where this is
+   going*.
 8. [`tests/`](tests) — data-quality checks on the ETL output (`test_etl.py`) and sanity checks
    on the model feature query (`test_repeat_purchase_features.py`), including the right-censoring
    cutoff and an independent recompute of the `review_score` 30-day timing gate.
@@ -127,13 +128,14 @@ are used:
 The analysis so far is diagnostic, not causal, and nothing is wired into a live workflow yet.
 Planned next steps:
 
-- **~~Experiment tracking with MLflow~~ — in place.** Every CV run and the final held-out
-  evaluation log their feature set, config, and metrics to MLflow, tagged with the git commit
-  they ran on (see `src/experiment_tracking.py`). Set up now, ahead of the geolocation/seller
-  feature work below, so that comparison is a real run-over-run diff instead of "from memory."
+- **Build the Power BI dashboard.** Power BI Desktop can't open a direct connection to the
+  Supabase Postgres instance, so `src/repeat_purchase_analysis.py` and `notebooks/analysis.ipynb`
+  also write their outputs to `power_bi/exports/*.csv`. Next step is to import those CSVs into
+  Power BI and build the report pages (growth overview, funnel, cohort retention, repeat-purchase
+  drivers).
 
 - **More features from the geolocation and seller data.** Fold `olist_geolocation_dataset.csv` and
-  `olist_sellers_dataset.csv` into the feature query — customer↔seller distance, seller state,
+  `olist_sellers_dataset.csv` into the feature query — customer to seller distance, seller state,
   delivery-region density — to test whether *how far the order travelled* and *who sold it* carry
   signal the current "what / where" features miss.
 
