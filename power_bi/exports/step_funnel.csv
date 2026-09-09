@@ -1,0 +1,4 @@
+from_stage,to_stage,from_count,to_count,pct_moved_to_next
+created,approved,99441,99281,99.84
+approved,shipped,99281,97658,98.37
+shipped,delivered,97658,96476,98.79

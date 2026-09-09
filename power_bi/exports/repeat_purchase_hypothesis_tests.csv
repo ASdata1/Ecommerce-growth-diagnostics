@@ -1,0 +1,4 @@
+hypothesis,test,statistic_name,statistic,p_value,dof,effect_size_name,effect_size,significant_05,detail,run_at,git_commit
+Review score differs: repeat vs one-time buyers,Welch's t-test,t,2.064059280324476,0.03909992668549035,,Cohen's d,0.03974747010294993,True,"repeat mean=4.19 (n=2,738) vs one-time mean=4.13 (n=80,307)",2026-09-09 16:47:29.766513+00:00,47aad8ea17d8ecc44853a4abf7690f2bd4dab71c
+Repeat-purchase rate differs by payment type,Chi-square test of independence,chi2,5.637696120466357,0.13063093823904606,3.0,,,False,4 payment types compared,2026-09-09 16:47:29.766513+00:00,47aad8ea17d8ecc44853a4abf7690f2bd4dab71c
+Pairwise numeric interactions improve model fit,Likelihood-ratio test,LR chi2,49.26913438288466,0.007794328088473117,28.0,,,True,base log-likelihood=-9647.1 (9 params) vs +interactions=-9622.5 (37 params),2026-09-09 16:47:29.766513+00:00,47aad8ea17d8ecc44853a4abf7690f2bd4dab71c

@@ -1,0 +1,2 @@
+model,interaction_terms,n_customers,n_repeat,base_rate,cv_pr_auc_base,cv_pr_auc_interactions,lr_test_p_value,roc_auc,pr_auc,top_10pct_capture_rate,top_20pct_capture_rate,git_commit,run_at
+Logistic regression (base features),False,83644,2768,0.0331,0.05,0.0498,0.007794328088473117,0.5936,0.0524,17.87,30.69,47aad8ea17d8ecc44853a4abf7690f2bd4dab71c,2026-09-09 16:47:29.766513+00:00

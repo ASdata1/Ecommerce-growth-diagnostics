@@ -8,3 +8,5 @@ __pycache__/
 venv/
 .env
 mlruns/
+# personal Power BI setup notes - keep private; the CSV exports under power_bi/exports/ are tracked
+power_bi/*.md
