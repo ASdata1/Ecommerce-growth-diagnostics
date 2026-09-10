@@ -83,11 +83,12 @@ are used:
    headline results — odds ratios, hypothesis-test p-values, and the top-line metrics — back to
    the database as three small tables (`repeat_purchase_odds_ratios`,
    `repeat_purchase_hypothesis_tests`, `repeat_purchase_model_metrics`), each row stamped with
-   `run_at` and the git commit, and mirrored to `power_bi/exports/*.csv` for the dashboard.
-7. **Power BI dashboard** — built from the CSV exports in `power_bi/exports/`: the funnel, the
-   cohort-retention heatmap, the regional value/volume cut, and a repeat-purchase drivers page
-   from the odds-ratio and hypothesis-test tables above. Not yet assembled — see *Where this is
-   going*.
+   `run_at` and the git commit, and mirrored to `Dashboard/exports/*.csv` for the dashboard.
+7. **Web dashboard** — an interactive dashboard built with Claude (Anthropic's Claude Code) from
+   the CSV exports in `Dashboard/exports/`: a growth overview, the funnel, the cohort-retention
+   heatmap, the regional value/volume cut, and a repeat-purchase drivers page from the odds-ratio
+   and hypothesis-test tables above. Live URL in
+   [`Dashboard/dashboard_websiteurl.md`](Dashboard/dashboard_websiteurl.md).
 8. [`tests/`](tests) — data-quality checks on the ETL output (`test_etl.py`) and sanity checks
    on the model feature query (`test_repeat_purchase_features.py`), including the right-censoring
    cutoff and an independent recompute of the `review_score` 30-day timing gate.
@@ -123,12 +124,6 @@ are used:
 
 The analysis so far is diagnostic, not causal, and nothing is wired into a live workflow yet.
 Planned next steps:
-
-- **Build the Power BI dashboard.** Power BI Desktop can't open a direct connection to the
-  Supabase Postgres instance, so `src/repeat_purchase_analysis.py` and `notebooks/analysis.ipynb`
-  also write their outputs to `power_bi/exports/*.csv`. Next step is to import those CSVs into
-  Power BI and build the report pages (growth overview, funnel, cohort retention, repeat-purchase
-  drivers).
 
 - **More features from the geolocation and seller data.** Fold `olist_geolocation_dataset.csv` and
   `olist_sellers_dataset.csv` into the feature query — customer to seller distance, seller state,
