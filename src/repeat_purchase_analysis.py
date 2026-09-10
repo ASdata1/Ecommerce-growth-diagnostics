@@ -74,8 +74,8 @@ QUERY_PATH = Path(__file__).resolve().parent.parent / "queries" / "repeat_purcha
 CANDIDATES_QUERY_PATH = (
     Path(__file__).resolve().parent.parent / "queries" / "repeat_purchase_scoring_candidates.sql"
 )
-# flat-file copies of the dashboard tables, for Power BI when it can't reach Postgres directly
-EXPORT_DIR = Path(__file__).resolve().parent.parent / "power_bi" / "exports"
+# flat-file copies of the dashboard tables, for the web dashboard to load directly
+EXPORT_DIR = Path(__file__).resolve().parent.parent / "Dashboard" / "exports"
 
 NUMERIC_FEATURES = [
     "num_items",
@@ -385,8 +385,8 @@ def score_scoring_candidates(X: pd.DataFrame, y: pd.Series, interaction_terms: b
 def odds_ratio_table(pipeline: Pipeline) -> pd.DataFrame:
     """Per-feature odds ratios from the fitted logistic model. Prints the 5
     strongest each way for the console reader; returns EVERY feature as a
-    DataFrame so write_dashboard_tables() can persist the full set (Power BI
-    does its own Top-N on the bar chart)."""
+    DataFrame so write_dashboard_tables() can persist the full set (the
+    dashboard does its own Top-N on the bar chart)."""
     model = pipeline.named_steps["model"]
     feature_names = pipeline.named_steps["preprocess"].get_feature_names_out()
     coef = model.coef_[0]
@@ -416,15 +416,15 @@ def write_dashboard_tables(
     engine, hypothesis_rows: list[dict], odds_df: pd.DataFrame, metrics_row: dict
 ) -> None:
     """Persist the model's headline results as three small tables in the same DB
-    the per-customer score tables go to, so the Power BI "Repeat-purchase
+    the per-customer score tables go to, so the dashboard's "Repeat-purchase
     drivers" page binds to them directly instead of pasting console output:
 
       repeat_purchase_odds_ratios     - one row per model feature (bar chart)
       repeat_purchase_hypothesis_tests - one row per test, with p-values
       repeat_purchase_model_metrics    - single row of headline metrics (KPI cards)
 
-    Each is also written to power_bi/exports/<name>.csv, so Power BI can import
-    the flat files when it can't connect to Postgres directly.
+    Each is also written to Dashboard/exports/<name>.csv, so the web dashboard
+    can load the flat files without a Postgres connection.
 
     if_exists="replace" (like repeat_purchase_test_scores) - the dashboard shows
     the latest run. Every row carries run_at + git_commit, so this can be
@@ -446,7 +446,7 @@ def write_dashboard_tables(
     for name, frame in frames.items():
         frame.to_sql(name, engine, if_exists="replace", index=False)
         frame.to_csv(EXPORT_DIR / f"{name}.csv", index=False)
-        print(f"Wrote {len(frame):,} row(s) -> {name} (+ power_bi/exports/{name}.csv)")
+        print(f"Wrote {len(frame):,} row(s) -> {name} (+ Dashboard/exports/{name}.csv)")
 
 
 def main() -> None:
