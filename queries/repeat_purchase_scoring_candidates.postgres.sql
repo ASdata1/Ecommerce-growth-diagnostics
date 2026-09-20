@@ -12,6 +12,7 @@ orders_ranked AS (
     SELECT
         c.customer_unique_id,
         c.customer_state,
+        c.customer_zip_code_prefix,
         o.order_id,
         o.order_purchase_timestamp::timestamp      AS order_purchase_timestamp,
         o.order_estimated_delivery_date::timestamp AS order_estimated_delivery_date,
@@ -36,10 +37,32 @@ first_order_items AS (
         COUNT(*) AS num_items,
         SUM(oi.price) AS items_price,
         SUM(oi.freight_value) AS freight_value,
-        MIN(p.product_category_name) AS product_category
+        MIN(p.product_category_name) AS product_category,
+        -- same crude pick for seller_id (matches training query)
+        MIN(oi.seller_id) AS seller_id
     FROM order_items oi
     LEFT JOIN products p ON oi.product_id = p.product_id
     GROUP BY oi.order_id
+),
+seller_state_counts AS (
+    SELECT seller_state, COUNT(*) AS seller_state_seller_count
+    FROM sellers
+    GROUP BY seller_state
+),
+first_order_geo AS (
+    -- matches training query's first_order_geo - see repeat_purchase_features.postgres.sql
+    SELECT
+        f.order_id,
+        cg.geolocation_lat AS customer_lat,
+        cg.geolocation_lng AS customer_lng,
+        s.seller_state,
+        sg.geolocation_lat AS seller_lat,
+        sg.geolocation_lng AS seller_lng
+    FROM first_orders f
+    LEFT JOIN geolocation cg ON cg.geolocation_zip_code_prefix = f.customer_zip_code_prefix
+    LEFT JOIN first_order_items fi ON fi.order_id = f.order_id
+    LEFT JOIN sellers s ON s.seller_id = fi.seller_id
+    LEFT JOIN geolocation sg ON sg.geolocation_zip_code_prefix = s.seller_zip_code_prefix
 ),
 first_order_payments AS (
     SELECT
@@ -80,8 +103,16 @@ SELECT
     (EXTRACT(EPOCH FROM (f.order_delivered_customer_date - f.order_purchase_timestamp)) / 86400.0)::double precision
         AS delivery_time_days,
     (EXTRACT(EPOCH FROM (f.order_delivered_customer_date - f.order_estimated_delivery_date)) / 86400.0)::double precision
-        AS delivery_delay_days
+        AS delivery_delay_days,
+    fg.customer_lat,
+    fg.customer_lng,
+    fg.seller_state,
+    fg.seller_lat,
+    fg.seller_lng,
+    ssc.seller_state_seller_count
 FROM first_orders f
 LEFT JOIN first_order_items fi ON fi.order_id = f.order_id
 LEFT JOIN first_order_payments fp ON fp.order_id = f.order_id
-LEFT JOIN first_order_review fr ON fr.order_id = f.order_id;
+LEFT JOIN first_order_review fr ON fr.order_id = f.order_id
+LEFT JOIN first_order_geo fg ON fg.order_id = f.order_id
+LEFT JOIN seller_state_counts ssc ON ssc.seller_state = fg.seller_state;

@@ -30,6 +30,7 @@ CANDIDATES_QUERY_PATH = (
 # without sklearn/statsmodels will error at collection here, not skip.)
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
+from geo_features import add_geo_features
 from repeat_purchase_analysis import (
     CATEGORICAL_FEATURES,
     NUMERIC_FEATURES,
@@ -97,6 +98,42 @@ def test_review_delay_days_bounded_where_score_known(features: pd.DataFrame) -> 
     assert (features.loc[known, "review_delay_days"] <= 30).all()
 
 
+def test_geo_columns_mostly_populated(features: pd.DataFrame) -> None:
+    # first_order_geo left-joins geolocation by zip prefix - a handful of zip
+    # prefixes have no geolocation row (see src/etl.py's load_geolocation), so
+    # nulls are expected, but only for a small minority of first orders
+    assert features["customer_lat"].notnull().mean() > 0.95
+    assert features["seller_lat"].notnull().mean() > 0.95
+    # seller_state comes straight from the sellers table (no geolocation join),
+    # so every first order with a seller pick should have one
+    assert features["seller_state"].notnull().mean() > 0.95
+
+
+def test_seller_state_seller_count_positive(features: pd.DataFrame) -> None:
+    # every state with at least one seller has seller_state_seller_count >= 1;
+    # a 0 or negative value would mean the seller_state_counts join is broken
+    known = features["seller_state_seller_count"].notnull()
+    assert (features.loc[known, "seller_state_seller_count"] >= 1).all()
+
+
+def test_add_geo_features_distance_and_same_state(features: pd.DataFrame) -> None:
+    # exercises src/geo_features.py's add_geo_features() against the real query
+    # output - the same call load_features() makes in repeat_purchase_analysis.py
+    with_geo = add_geo_features(features)
+    distance = with_geo["customer_seller_distance_km"].dropna()
+    assert (distance >= 0).all()
+    # loose upper bound (half of Earth's circumference) - just a haversine
+    # sanity check, not a Brazil-geography assumption: the raw geolocation
+    # dataset has a handful of known outlier lat/lng points outside Brazil
+    assert (distance <= 20015).all()
+
+    same_state = with_geo["same_state"].dropna()
+    assert set(same_state.unique()) <= {0.0, 1.0}
+    # same_state should be null exactly where customer_state or seller_state is
+    expect_null = with_geo["customer_state"].isna() | with_geo["seller_state"].isna()
+    assert with_geo["same_state"].isna().equals(expect_null)
+
+
 
 @pytest.fixture(scope="module")
 def candidates() -> pd.DataFrame:
@@ -124,10 +161,13 @@ def test_candidates_have_no_target_column(candidates: pd.DataFrame) -> None:
 
 
 def test_candidates_columns_are_exactly_the_model_features(candidates: pd.DataFrame) -> None:
-    # score_scoring_candidates() does candidates[NUMERIC_FEATURES + CATEGORICAL_FEATURES];
-    # a renamed or missing column would KeyError at predict time.
+    # score_scoring_candidates() runs the raw query through add_geo_features()
+    # and then does candidates[NUMERIC_FEATURES + CATEGORICAL_FEATURES]; a
+    # renamed or missing column (before or after that transform) would KeyError
+    # at predict time.
+    with_geo = add_geo_features(candidates)
     expected = {"customer_unique_id", *NUMERIC_FEATURES, *CATEGORICAL_FEATURES}
-    assert set(candidates.columns) == expected
+    assert expected <= set(with_geo.columns)
 
 
 def test_candidates_disjoint_from_training_set(

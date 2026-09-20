@@ -62,6 +62,29 @@ def load_products() -> pd.DataFrame:
     return df.drop_duplicates(subset=["product_id"])
 
 
+def load_geolocation() -> pd.DataFrame:
+    """Added for geo features (src/geo_features.py): customer/seller distance and
+    same-state match. The raw file has many lat/lng readings per zip prefix
+    (repeat geocodes of addresses sharing that prefix), so it's collapsed here to
+    one row per geolocation_zip_code_prefix (mean lat/lng) - that way
+    queries/repeat_purchase_features.sql can join it with a plain equality join
+    instead of fanning out first-order rows."""
+    df = pd.read_csv(RAW_DIR / "olist_geolocation_dataset.csv")
+    df = df.dropna(subset=["geolocation_zip_code_prefix"])
+    return df.groupby("geolocation_zip_code_prefix", as_index=False).agg(
+        geolocation_lat=("geolocation_lat", "mean"),
+        geolocation_lng=("geolocation_lng", "mean"),
+    )
+
+
+def load_sellers() -> pd.DataFrame:
+    """Added for geo features: seller_state and (via geolocation) seller lat/lng
+    are candidate drivers of customer-seller distance."""
+    df = pd.read_csv(RAW_DIR / "olist_sellers_dataset.csv")
+    df = df.dropna(subset=["seller_id"])
+    return df.drop_duplicates(subset=["seller_id"])
+
+
 def main() -> None:
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     tables = {
@@ -71,6 +94,8 @@ def main() -> None:
         "customers": load_customers(),
         "order_reviews": load_order_reviews(),
         "products": load_products(),
+        "geolocation": load_geolocation(),
+        "sellers": load_sellers(),
     }
 
     with sqlite3.connect(DB_PATH) as conn:
@@ -89,6 +114,10 @@ def main() -> None:
         conn.execute("CREATE INDEX IF NOT EXISTS idx_customers_customer_unique_id ON customers(customer_unique_id)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_order_reviews_order_id ON order_reviews(order_id)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_products_product_id ON products(product_id)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_geolocation_zip ON geolocation(geolocation_zip_code_prefix)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_sellers_seller_id ON sellers(seller_id)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_sellers_zip ON sellers(seller_zip_code_prefix)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_customers_zip ON customers(customer_zip_code_prefix)")
 
     print(f"\ndone -> {DB_PATH}")
 

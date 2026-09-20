@@ -10,7 +10,16 @@ from sqlalchemy import text
 
 from db import DEFAULT_SQLITE_PATH, get_engine
 
-TABLES = ["customers", "orders", "order_items", "order_payments", "order_reviews", "products"]
+TABLES = [
+    "customers",
+    "orders",
+    "order_items",
+    "order_payments",
+    "order_reviews",
+    "products",
+    "geolocation",
+    "sellers",
+]
 
 # Same join-key indexes src/etl.py builds on the local SQLite DB. to_sql(...) only
 # copies rows, not indexes, so without this every downstream join/subquery on the
@@ -24,6 +33,10 @@ INDEXES = {
     "idx_customers_customer_unique_id": "customers(customer_unique_id)",
     "idx_order_reviews_order_id": "order_reviews(order_id)",
     "idx_products_product_id": "products(product_id)",
+    "idx_geolocation_zip": "geolocation(geolocation_zip_code_prefix)",
+    "idx_sellers_seller_id": "sellers(seller_id)",
+    "idx_sellers_zip": "sellers(seller_zip_code_prefix)",
+    "idx_customers_zip": "customers(customer_zip_code_prefix)",
 }
 
 

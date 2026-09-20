@@ -69,6 +69,7 @@ from sklearn.preprocessing import OneHotEncoder, PolynomialFeatures, StandardSca
 
 from db import get_engine
 from experiment_tracking import git_commit, track_run
+from geo_features import add_geo_features
 
 QUERY_PATH = Path(__file__).resolve().parent.parent / "queries" / "repeat_purchase_features.sql"
 CANDIDATES_QUERY_PATH = (
@@ -86,6 +87,9 @@ NUMERIC_FEATURES = [
     "review_score",
     "delivery_time_days",
     "delivery_delay_days",
+    "customer_seller_distance_km",
+    "same_state",
+    "seller_state_seller_count",
 ]
 
 
@@ -95,11 +99,15 @@ TARGET = "repeat_purchase"
 
 def load_features(engine=None) -> pd.DataFrame:
     engine = engine or get_engine()
- 
+
     query_path = QUERY_PATH
     if engine.dialect.name == "postgresql":
         query_path = QUERY_PATH.with_name("repeat_purchase_features.postgres.sql")
-    return pd.read_sql(query_path.read_text(), engine)
+    df = pd.read_sql(query_path.read_text(), engine)
+    # the query only joins and exposes raw lat/lng + seller_state (see
+    # first_order_geo in that .sql file) - add_geo_features() derives the actual
+    # model features (distance, same-state) from them here, once, in pandas
+    return add_geo_features(df)
 
 
 def run_hypothesis_tests(df: pd.DataFrame) -> list[dict]:
@@ -357,6 +365,7 @@ def score_scoring_candidates(X: pd.DataFrame, y: pd.Series, interaction_terms: b
             "the right-censoring window) - skipping repeat_purchase_scoring_candidates."
         )
         return
+    candidates = add_geo_features(candidates)
 
     deploy_pipeline = build_pipeline(interaction_terms=interaction_terms)
     deploy_pipeline.fit(X, y)
@@ -463,9 +472,10 @@ def main() -> None:
     )
 
     print("\n=== Cross-validation (train set only) ===")
-    # Feature set is logged with every run: when geolocation/seller features get
-    # added to NUMERIC_FEATURES/CATEGORICAL_FEATURES, this is what makes a later
-    # run's metrics comparable (or not) to this one - see experiment_tracking.py.
+    # Feature set is logged with every run: this is what makes a later run's
+    # metrics comparable (or not) to this one - e.g. the geo features added here
+    # (customer_seller_distance_km, same_state, seller_state_seller_count) shift
+    # PR-AUC versus any run logged before them - see experiment_tracking.py.
     feature_config = {
         "numeric_features": ",".join(NUMERIC_FEATURES),
         "categorical_features": ",".join(CATEGORICAL_FEATURES),

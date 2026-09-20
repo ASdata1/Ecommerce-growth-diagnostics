@@ -13,7 +13,8 @@
 --
 -- See repeat_purchase_features.sql for the full rationale behind each CTE
 -- (first-order-only features, the right-censoring cutoff, and the 30-day-after-
--- delivery review window - which no longer looks at the second order at all).
+-- delivery review window - which no longer looks at the second order at all -
+-- plus first_order_geo, which is dialect-identical: no date/trig arithmetic).
 
 WITH dataset_bounds AS (
     SELECT
@@ -27,6 +28,7 @@ orders_ranked AS (
     SELECT
         c.customer_unique_id,
         c.customer_state,
+        c.customer_zip_code_prefix,
         o.order_id,
         o.order_purchase_timestamp::timestamp      AS order_purchase_timestamp,
         o.order_estimated_delivery_date::timestamp AS order_estimated_delivery_date,
@@ -58,10 +60,42 @@ first_order_items AS (
         -- crude "main category" pick for a multi-item order: first product's
         -- category alphabetically. Good enough for a portfolio feature; a
         -- production version would pick by highest item value instead.
-        MIN(p.product_category_name) AS product_category
+        MIN(p.product_category_name) AS product_category,
+        -- same crude pick, applied to seller_id, so first_order_geo has exactly
+        -- one seller per order to compute distance/same-state against
+        MIN(oi.seller_id) AS seller_id
     FROM order_items oi
     LEFT JOIN products p ON oi.product_id = p.product_id
     GROUP BY oi.order_id
+),
+seller_state_counts AS (
+    -- market-density feature: how many sellers operate out of this seller's
+    -- state - a crude proxy for how competitive/established that state's seller
+    -- base is, independent of any one seller's distance to this customer
+    SELECT seller_state, COUNT(*) AS seller_state_seller_count
+    FROM sellers
+    GROUP BY seller_state
+),
+first_order_geo AS (
+    -- Raw geo inputs for src/geo_features.py's add_geo_features(): customer
+    -- coordinates from their zip prefix, seller_state from the sellers table
+    -- directly, and the seller's coordinates from their zip prefix. geolocation
+    -- is pre-aggregated to one row per zip prefix in src/etl.py's
+    -- load_geolocation(), so these are plain equality joins, not fan-outs. A zip
+    -- prefix with no geolocation match (rare - see load_geolocation) leaves
+    -- lat/lng null, same as any other missing feature.
+    SELECT
+        f.order_id,
+        cg.geolocation_lat AS customer_lat,
+        cg.geolocation_lng AS customer_lng,
+        s.seller_state,
+        sg.geolocation_lat AS seller_lat,
+        sg.geolocation_lng AS seller_lng
+    FROM first_orders f
+    LEFT JOIN geolocation cg ON cg.geolocation_zip_code_prefix = f.customer_zip_code_prefix
+    LEFT JOIN first_order_items fi ON fi.order_id = f.order_id
+    LEFT JOIN sellers s ON s.seller_id = fi.seller_id
+    LEFT JOIN geolocation sg ON sg.geolocation_zip_code_prefix = s.seller_zip_code_prefix
 ),
 first_order_payments AS (
     SELECT
@@ -114,8 +148,16 @@ SELECT
         AS delivery_time_days,
     (EXTRACT(EPOCH FROM (f.order_delivered_customer_date - f.order_estimated_delivery_date)) / 86400.0)::double precision
         AS delivery_delay_days,  -- positive = delivered later than promised
+    fg.customer_lat,
+    fg.customer_lng,
+    fg.seller_state,
+    fg.seller_lat,
+    fg.seller_lng,
+    ssc.seller_state_seller_count,
     CASE WHEN f.num_orders > 1 THEN 1 ELSE 0 END AS repeat_purchase
 FROM first_orders f
 LEFT JOIN first_order_items fi ON fi.order_id = f.order_id
 LEFT JOIN first_order_payments fp ON fp.order_id = f.order_id
-LEFT JOIN first_order_review fr ON fr.order_id = f.order_id;
+LEFT JOIN first_order_review fr ON fr.order_id = f.order_id
+LEFT JOIN first_order_geo fg ON fg.order_id = f.order_id
+LEFT JOIN seller_state_counts ssc ON ssc.seller_state = fg.seller_state;

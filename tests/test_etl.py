@@ -34,6 +34,12 @@ def test_customers_table_not_empty(conn):
 def test_payments_table_not_empty(conn):
     count = conn.execute("SELECT COUNT(*) FROM order_payments").fetchone()[0]
     assert count > 0
+def test_geolocation_table_not_empty(conn):
+    count = conn.execute("SELECT COUNT(*) FROM geolocation").fetchone()[0]
+    assert count > 0
+def test_sellers_table_not_empty(conn):
+    count = conn.execute("SELECT COUNT(*) FROM sellers").fetchone()[0]
+    assert count > 0
 
 def test_load_orders_no_null_order_id():
     df = src.etl.load_orders()
@@ -42,6 +48,16 @@ def test_load_orders_no_null_order_id():
 def test_load_customers_no_null_customer_id():
     df = src.etl.load_customers()
     assert df["customer_id"].isnull().sum() == 0
+
+def test_load_geolocation_one_row_per_zip_prefix():
+    # raw file has many lat/lng readings per prefix - load_geolocation() collapses
+    # them so the geo join in queries/repeat_purchase_features.sql is 1:1
+    df = src.etl.load_geolocation()
+    assert df["geolocation_zip_code_prefix"].is_unique
+
+def test_load_sellers_no_null_seller_id():
+    df = src.etl.load_sellers()
+    assert df["seller_id"].isnull().sum() == 0
 
 # every order_id in order_items must also exist in orders 
 def test_order_id_integrity():
