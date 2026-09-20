@@ -20,6 +20,7 @@ from contextlib import contextmanager
 from typing import Any, Iterator
 
 import mlflow
+import pandas as pd
 
 EXPERIMENT_NAME = "repeat-purchase-propensity"
 
@@ -54,3 +55,11 @@ def track_run(run_name: str, params: dict[str, Any]) -> Iterator[Any]:
         mlflow.set_tag("git_commit", git_commit())
         mlflow.log_params(params)
         yield mlflow.log_metrics
+
+
+def log_table(data: pd.DataFrame, artifact_file: str) -> None:
+    """Logs a DataFrame as a table artifact on the current run - call only from
+    inside a `with track_run(...):` block, same as the `log` (log_metrics) it
+    yields. For results too shaped like a table (one row per feature, not a
+    single headline number) to fit log_metrics' scalar-per-key model."""
+    mlflow.log_table(data=data, artifact_file=artifact_file)

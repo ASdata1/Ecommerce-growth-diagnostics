@@ -67,8 +67,9 @@ from sklearn.model_selection import StratifiedKFold, train_test_split
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OneHotEncoder, PolynomialFeatures, StandardScaler
 
+from confidence_interval import compute_confidence_intervals
 from db import get_engine
-from experiment_tracking import git_commit, track_run
+from experiment_tracking import git_commit, log_table, track_run
 from geo_features import add_geo_features
 
 QUERY_PATH = Path(__file__).resolve().parent.parent / "queries" / "repeat_purchase_features.sql"
@@ -291,7 +292,7 @@ def _rank_and_decile(scores: pd.DataFrame) -> pd.DataFrame:
 
 def evaluate_on_test(
     pipeline: Pipeline, X_train, y_train, X_test, y_test, ids_test: pd.Series, label: str, engine
-) -> tuple[dict, pd.DataFrame]:
+) -> tuple[dict, pd.DataFrame, pd.DataFrame]:
     print(f"\n=== Final held-out test evaluation: {label} ===")
     baseline = DummyClassifier(strategy="most_frequent").fit(X_train, y_train)
     print("--- Baseline (always predict majority class) ---")
@@ -340,7 +341,8 @@ def evaluate_on_test(
     print(f"\nWrote {len(scored_test):,} scored test-set customers -> repeat_purchase_test_scores")
 
     odds_df = odds_ratio_table(pipeline)
-    return metrics, odds_df
+    ci_df = compute_confidence_intervals(pipeline, X_train, y_train)
+    return metrics, odds_df, ci_df
 
 
 def score_scoring_candidates(X: pd.DataFrame, y: pd.Series, interaction_terms: bool, engine) -> None:
@@ -512,10 +514,13 @@ def main() -> None:
             "base_rate": round(float(y.mean()), 4),
         },
     ) as log:
-        final_metrics, odds_df = evaluate_on_test(
+        final_metrics, odds_df, ci_df = evaluate_on_test(
             chosen, X_train, y_train, X_test, y_test, ids_test, label, engine
         )
         log(final_metrics)
+        # CI table only, not yet a Dashboard/exports CSV or DB table like odds_df -
+        # MLflow is the only place this is tracked for now.
+        log_table(ci_df, artifact_file="confidence_intervals.json")
 
     metrics_row = {
         "model": label,
