@@ -100,11 +100,7 @@ TARGET = "repeat_purchase"
 
 def load_features(engine=None) -> pd.DataFrame:
     engine = engine or get_engine()
-
-    query_path = QUERY_PATH
-    if engine.dialect.name == "postgresql":
-        query_path = QUERY_PATH.with_name("repeat_purchase_features.postgres.sql")
-    df = pd.read_sql(query_path.read_text(), engine)
+    df = pd.read_sql(QUERY_PATH.read_text(), engine)
     # the query only joins and exposes raw lat/lng + seller_state (see
     # first_order_geo in that .sql file) - add_geo_features() derives the actual
     # model features (distance, same-state) from them here, once, in pandas
@@ -356,10 +352,7 @@ def score_scoring_candidates(X: pd.DataFrame, y: pd.Series, interaction_terms: b
     reported the held-out numbers, so there's no more leakage risk to protect -
     the deployed model should use every labelled row available.
     """
-    query_path = CANDIDATES_QUERY_PATH
-    if engine.dialect.name == "postgresql":
-        query_path = CANDIDATES_QUERY_PATH.with_name("repeat_purchase_scoring_candidates.postgres.sql")
-    candidates = pd.read_sql(query_path.read_text(), engine)
+    candidates = pd.read_sql(CANDIDATES_QUERY_PATH.read_text(), engine)
 
     if candidates.empty:
         print(
@@ -435,7 +428,7 @@ def write_dashboard_tables(
       repeat_purchase_model_metrics    - single row of headline metrics (KPI cards)
 
     Each is also written to Dashboard/exports/<name>.csv, so the web dashboard
-    can load the flat files without a Postgres connection.
+    can load the flat files without a DB connection.
 
     if_exists="replace" (like repeat_purchase_test_scores) - the dashboard shows
     the latest run. Every row carries run_at + git_commit, so this can be

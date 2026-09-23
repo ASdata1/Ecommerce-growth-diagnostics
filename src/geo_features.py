@@ -2,11 +2,10 @@
 Pure-Python geo feature engineering shared by notebooks/geolocation_analysis.ipynb
 and src/repeat_purchase_analysis.py - one implementation, not two copies that
 drift apart. Exists because SQLite (this project's local DB) has no trig
-functions, so haversine distance can't be computed in queries/*.sql without
-diverging from the Postgres twin (see repeat_purchase_features.sql's
-first_order_geo CTE comment). SQL only joins and exposes raw lat/lng +
-seller_state + seller_state_seller_count; this module derives model-ready
-features from them in numpy.
+functions, so haversine distance can't be computed in queries/*.sql (see
+repeat_purchase_features.sql's first_order_geo CTE comment). SQL only joins
+and exposes raw lat/lng + seller_state + seller_state_seller_count; this
+module derives model-ready features from them in numpy.
 """
 
 import numpy as np

@@ -1,6 +1,4 @@
 -- SCORING CANDIDATES (SQLite) - outreach list the repeat-purchase model scores.
--- Keep in sync with repeat_purchase_scoring_candidates.postgres.sql (used when
--- DATABASE_URL points at the cloud DB).
 --
 -- Complement of repeat_purchase_features.sql: first-time customers INSIDE the
 -- 3-month right-censoring window, too recent to know whether they'll reorder -

@@ -25,8 +25,8 @@ analysis script (see *How it's built* below).
 |---|---|---|
 | ROC-AUC | 0.59 | 0.50 (random) |
 | PR-AUC | 0.052 | 0.033 (base rate) |
-| Top-10% decile capture | 18% of repeaters (1.8x lift) | 10% (random) |
-| Top-20% decile capture | 31% of repeaters | 20% (random) |
+| Top-10% decile capture | 16.8% of repeaters (1.7x lift) | 10% (random) |
+| Top-20% decile capture | 30.5% of repeaters | 20% (random) |
 
 Repeat purchase is rare (3.3% of 83,644 first-time customers) and only
 weakly predictable from first-order data — not a reliable classifier,
@@ -35,7 +35,7 @@ but useful for ranking/targeting.
 ## The data
 
 [Olist Brazilian E-Commerce Public Dataset](https://www.kaggle.com/datasets/olistbr/brazilian-ecommerce)
-— ~100k real orders placed on a Brazilian e-commerce marketplace, 2016-2018. 6 of the 8 tables
+— ~100k real orders placed on a Brazilian e-commerce marketplace, 2016-2018. All 8 tables
 are used:
 
 - `olist_orders_dataset.csv` — order status + timestamps
@@ -44,6 +44,8 @@ are used:
 - `olist_customers_dataset.csv` — customer id + state
 - `olist_order_reviews_dataset.csv` — review score (added for the repeat-purchase model)
 - `olist_products_dataset.csv` — product category (added for the repeat-purchase model)
+- `olist_geolocation_dataset.csv` — zip-prefix lat/lng (added for the repeat-purchase model's geo features)
+- `olist_sellers_dataset.csv` — seller id + state (added for the repeat-purchase model's geo features)
 
 ## How it's built
 
@@ -51,10 +53,7 @@ are used:
    loads them into a local SQLite database at `data/olist.db`, and indexes the join columns every
    downstream query relies on. Deliberately does **not** impute or otherwise transform values —
    that decision belongs downstream, informed by EDA, not baked silently into the raw data.
-2. [`src/migrate_to_cloud.py`](src/migrate_to_cloud.py) — pushes the local SQLite tables to a
-   cloud Postgres database (free-tier Supabase) so the dashboard and model run against a real
-   cloud data source instead of a local file.
-3. [`queries/`](queries) — one SQL file per question above, plus `step_funnel.sql` for the
+2. [`queries/`](queries) — one SQL file per question above, plus `step_funnel.sql` for the
    stage-over-stage conversion view and `repeat_purchase_features.sql` for the model's feature set.
    Every feature is built from the customer's **first order only** (pulling from later orders would
    leak the target); the query applies a **right-censoring cutoff** (first orders in the last 3
@@ -64,14 +63,14 @@ are used:
    happened, so `review_score`'s null-ness is not a function of the target. Late or missing
    reviews leave it null and are median-imputed by the model; `review_delay_days` is emitted as an
    EDA diagnostic only. See the query's header comments for the full reasoning.
-4. [`notebooks/analysis.ipynb`](notebooks/analysis.ipynb) — runs each query against
+3. [`notebooks/analysis.ipynb`](notebooks/analysis.ipynb) — runs each query against
    `data/olist.db`, charts the result, and writes up the finding.
-5. [`notebooks/repeat_purchase_eda.ipynb`](notebooks/repeat_purchase_eda.ipynb) — EDA on the raw
+4. [`notebooks/repeat_purchase_eda.ipynb`](notebooks/repeat_purchase_eda.ipynb) — EDA on the raw
    feature-query output, run **before** any imputation or modeling decision: class balance,
    missingness per column and how to handle the missing `review_score` values, a VIF check on the
    collinear delivery/payment features, whether the recency cutoff actually removed the
    right-censoring problem, and per-feature distributions split by target.
-6. [`src/repeat_purchase_analysis.py`](src/repeat_purchase_analysis.py) — hypothesis tests
+5. [`src/repeat_purchase_analysis.py`](src/repeat_purchase_analysis.py) — hypothesis tests
    (Welch's t-test, chi-square) and a logistic regression predicting repeat purchase: 5-fold
    stratified cross-validation on the training set, a likelihood-ratio test (via `statsmodels`)
    comparing plain features against added interaction terms, and odds ratios for interpretability
@@ -83,16 +82,16 @@ are used:
    headline results — odds ratios, hypothesis-test p-values, and the top-line metrics — back to
    the database as three small tables (`repeat_purchase_odds_ratios`,
    `repeat_purchase_hypothesis_tests`, `repeat_purchase_model_metrics`), each row stamped with
-   `run_at` and the git commit, and mirrored to `power_bi/exports/*.csv` for the dashboard.
-7. **Power BI dashboard** — built from the CSV exports in `power_bi/exports/`: the funnel, the
+   `run_at` and the git commit, and mirrored to `Dashboard/exports/*.csv` for the dashboard.
+6. **Power BI dashboard** — built from the CSV exports in `Dashboard/exports/`: the funnel, the
    cohort-retention heatmap, the regional value/volume cut, and a repeat-purchase drivers page
    from the odds-ratio and hypothesis-test tables above. Not yet assembled — see *Where this is
    going*.
    **Temporary fix:** until the Power BI report is built, the same numbers are viewable as a
    self-contained HTML dashboard — [Olist Growth Dashboard](https://claude.ai/artifact/ULMkaLkcgrCmd6pFdqADDu)
    (growth overview, funnel + cohort retention, repeat-purchase drivers) — built with Claude
-   directly from the `power_bi/exports/*.csv` files, so the figures match what's in the database.
-8. [`tests/`](tests) — data-quality checks on the ETL output (`test_etl.py`) and sanity checks
+   directly from the `Dashboard/exports/*.csv` files, so the figures match what's in the database.
+7. [`tests/`](tests) — data-quality checks on the ETL output (`test_etl.py`) and sanity checks
    on the model feature query (`test_repeat_purchase_features.py`), including the right-censoring
    cutoff and an independent recompute of the `review_score` 30-day timing gate.
 
@@ -110,35 +109,50 @@ are used:
   on everything knowable at first-order time — review score, delivery speed and lateness, payment
   value, installments, product category, state — reaches only ROC-AUC 0.59 / PR-AUC 0.052 (base
   rate 0.033). It stays useful for *ranking*, though: targeting the top 10% of scored customers
-  captures 18% of those who actually return (1.8x lift over random), the top 20% captures 31%.
+  captures 16.8% of those who actually return (1.7x lift over random), the top 20% captures 30.5%.
 - **The measurable drivers are "what" and "where", not "how the first order went".** Review score
   differs by a significant-but-trivial 0.06 points between repeaters and one-timers (Welch t-test
   p=0.039, Cohen's d=0.04); payment type shows no relationship (chi-square p=0.13); delivery
   time, lateness, and order value all have |Cohen's d| < 0.08. The largest odds ratios are all
   product category and region — fashion-accessory, bed/bath, and furniture/decor first orders
   carry roughly 1.5–2.3x the repeat odds of electronics and "cool stuff", and customers in Rio
-  de Janeiro repeat more than those in Ceará. Treat these as directional: they're
-  `class_weight="balanced"` point estimates with no confidence intervals.
+  de Janeiro repeat more than those in Ceará. These are `class_weight="balanced"` point estimates
+  from the deployed, L2-regularized model; [`src/confidence_interval.py`](src/confidence_interval.py)
+  fits an unregularized companion model on the same design matrix to attach a 95% Wald confidence
+  interval to each one (logged to MLflow as a table artifact on every `final-evaluation` run, not
+  yet in the CSV/dashboard exports). The product-category and region drivers above are among the
+  ones whose interval excludes zero; `customer_seller_distance_km` does too (see next point) —
+  `same_state` and `seller_state_seller_count` don't clear that bar.
 - **Interaction terms didn't earn their place** — adding pairwise numeric interactions improved
-  model fit significantly (likelihood-ratio test p=0.008) but added no cross-validated PR-AUC, so
+  model fit significantly (likelihood-ratio test p=0.012) but added no cross-validated PR-AUC, so
   the simpler, interpretable model is the one reported.
+- **Geo features (distance, same-state, seller density) are in the model, but don't move the
+  headline metric.** `customer_seller_distance_km`, `same_state`, and `seller_state_seller_count`
+  (from `olist_geolocation_dataset.csv` and `olist_sellers_dataset.csv`) were added to
+  `NUMERIC_FEATURES` — see [`notebooks/geolocation_analysis.ipynb`](notebooks/geolocation_analysis.ipynb)
+  for the EDA case. Distance has a real, if tiny, effect (Welch's t-test p<0.0001, Cohen's d=-0.08;
+  its 95% CI in the fitted model excludes zero), but adding all three left ROC-AUC and PR-AUC
+  essentially flat and slightly *lowered* top-decile/quintile capture versus the pre-geo run —
+  comparing the two runs' odds ratios, the `customer_state` coefficients shifted the most
+  (up to ±0.26 in log-odds), suggesting the geo features are mostly reshuffling signal
+  `customer_state` already carried (distance is, after all, a function of where the customer
+  and seller are) rather than adding new information.
 
 ## Where this is going
 
 The analysis so far is diagnostic, not causal, and nothing is wired into a live workflow yet.
 Planned next steps:
 
-- **Build the Power BI dashboard.** Power BI Desktop can't open a direct connection to the
-  Supabase Postgres instance, so `src/repeat_purchase_analysis.py` and `notebooks/analysis.ipynb`
-  also write their outputs to `power_bi/exports/*.csv`. Next step is to import those CSVs into
+- **Build the Power BI dashboard.** `src/repeat_purchase_analysis.py` and `notebooks/analysis.ipynb`
+  write their outputs to `Dashboard/exports/*.csv`. Next step is to import those CSVs into
   Power BI and build the report pages (growth overview, funnel, cohort retention, repeat-purchase
   drivers). Until then, the [HTML dashboard](https://claude.ai/artifact/ULMkaLkcgrCmd6pFdqADDu)
   linked above stands in as a temporary fix, covering the same pages from the same CSV exports.
 
-- **More features from the geolocation and seller data.** Fold `olist_geolocation_dataset.csv` and
-  `olist_sellers_dataset.csv` into the feature query — customer to seller distance, seller state,
-  delivery-region density — to test whether *how far the order travelled* and *who sold it* carry
-  signal the current "what / where" features miss.
+- **Surface the confidence intervals outside MLflow.** `src/confidence_interval.py`'s per-feature
+  CIs are currently only logged to MLflow as a table artifact; add them to the
+  `repeat_purchase_odds_ratios` table (DB + `Dashboard/exports/*.csv`) so the dashboard's
+  repeat-purchase-drivers page can show uncertainty next to each bar, not just the point estimate.
 
 - **A written experiment design (not yet run)** for evaluating a retention campaign:
   - **The causal question the model can't answer.** The odds ratios say fashion-accessory first

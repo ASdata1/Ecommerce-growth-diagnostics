@@ -6,6 +6,4 @@ scikit-learn>=1.3
 scipy
 statsmodels
 sqlalchemy>=2.0
-psycopg2-binary
-python-dotenv
 mlflow

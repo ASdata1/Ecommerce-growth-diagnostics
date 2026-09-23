@@ -221,6 +221,26 @@ def test_candidates_no_negative_delivery_time(candidates: pd.DataFrame) -> None:
 # --------------------------------------------------------------------------------------
 
 
+@pytest.fixture(scope="module")
+def scored_candidates_table(features: pd.DataFrame) -> pd.DataFrame:
+    """One end-to-end run of score_scoring_candidates() against a throwaway COPY
+    of data/olist.db - it does a real to_sql(if_exists="replace") write, so it
+    must never touch the real local DB other tests/scripts read from. Copy is
+    removed in the `finally` regardless of test outcome."""
+    scratch_path = DB_PATH.with_name("olist_test_scratch.db")
+    shutil.copyfile(DB_PATH, scratch_path)
+    engine = create_engine(f"sqlite:///{scratch_path}")
+    try:
+        with_geo = add_geo_features(features)
+        X = with_geo[NUMERIC_FEATURES + CATEGORICAL_FEATURES]
+        y = with_geo[TARGET]
+        score_scoring_candidates(X, y, interaction_terms=False, engine=engine)
+        return pd.read_sql("SELECT * FROM repeat_purchase_scoring_candidates", engine)
+    finally:
+        engine.dispose()
+        scratch_path.unlink(missing_ok=True)
+
+
 def test_rank_and_decile_basic() -> None:
     n = 100
     df = pd.DataFrame({"repeat_probability": np.linspace(1.0, 0.0, n)})  # already sorted desc

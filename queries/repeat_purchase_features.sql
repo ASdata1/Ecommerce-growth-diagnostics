@@ -1,7 +1,5 @@
 -- FEATURES: REPEAT-PURCHASE PROPENSITY  (SQLite dialect - used by the tests
--- and any local olist.db run. repeat_purchase_features.postgres.sql is the
--- byte-for-byte-equivalent Postgres variant used when DATABASE_URL points at
--- the cloud DB; keep the two in sync.)
+-- and any local olist.db run.)
 --
 -- One row per customer, built ONLY from their FIRST order. This matters:
 -- if we pulled features from ALL of a customer's orders (e.g. total spend
@@ -45,12 +43,10 @@
 -- and the natural next SQL skill up from CTEs/subqueries.
 --
 -- Geo features (first_order_geo below): SQLite has no trig functions, so
--- distance can't be computed here without diverging from the Postgres twin.
--- This query only joins and exposes raw customer_lat/lng, seller_lat/lng,
--- seller_state and seller_state_seller_count; src/geo_features.py's
--- add_geo_features() turns those into customer_seller_distance_km and
--- same_state in pandas - one implementation, not a SQL/Postgres/pandas trio
--- that could each compute it slightly differently.
+-- distance can't be computed here. This query only joins and exposes raw
+-- customer_lat/lng, seller_lat/lng, seller_state and seller_state_seller_count;
+-- src/geo_features.py's add_geo_features() turns those into
+-- customer_seller_distance_km and same_state in pandas instead.
 --
 -- Tables: orders, order_items, order_payments, order_reviews, products,
 -- customers, geolocation, sellers
