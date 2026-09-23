@@ -417,15 +417,19 @@ def odds_ratio_table(pipeline: Pipeline) -> pd.DataFrame:
 
 
 def write_dashboard_tables(
-    engine, hypothesis_rows: list[dict], odds_df: pd.DataFrame, metrics_row: dict
+    engine, hypothesis_rows: list[dict], odds_df: pd.DataFrame, ci_df: pd.DataFrame, metrics_row: dict
 ) -> None:
-    """Persist the model's headline results as three small tables in the same DB
+    """Persist the model's headline results as four small tables in the same DB
     the per-customer score tables go to, so the dashboard's "Repeat-purchase
     drivers" page binds to them directly instead of pasting console output:
 
-      repeat_purchase_odds_ratios     - one row per model feature (bar chart)
-      repeat_purchase_hypothesis_tests - one row per test, with p-values
-      repeat_purchase_model_metrics    - single row of headline metrics (KPI cards)
+      repeat_purchase_odds_ratios         - one row per model feature (bar chart)
+      repeat_purchase_confidence_intervals - one row per feature, Wald CI on the
+                                             unregularized companion model (see
+                                             src/confidence_interval.py) - the
+                                             uncertainty band around the bars above
+      repeat_purchase_hypothesis_tests    - one row per test, with p-values
+      repeat_purchase_model_metrics       - single row of headline metrics (KPI cards)
 
     Each is also written to Dashboard/exports/<name>.csv, so the web dashboard
     can load the flat files without a DB connection.
@@ -439,6 +443,9 @@ def write_dashboard_tables(
 
     frames = {
         "repeat_purchase_odds_ratios": odds_df.assign(
+            model=metrics_row["model"], run_at=run_at, git_commit=commit
+        ),
+        "repeat_purchase_confidence_intervals": ci_df.assign(
             model=metrics_row["model"], run_at=run_at, git_commit=commit
         ),
         "repeat_purchase_hypothesis_tests": pd.DataFrame(hypothesis_rows).assign(
@@ -511,8 +518,9 @@ def main() -> None:
             chosen, X_train, y_train, X_test, y_test, ids_test, label, engine
         )
         log(final_metrics)
-        # CI table only, not yet a Dashboard/exports CSV or DB table like odds_df -
-        # MLflow is the only place this is tracked for now.
+        # Also logged as an MLflow table artifact (in addition to the DB/CSV
+        # write in write_dashboard_tables() below) so a single run's CIs are
+        # browsable in the MLflow UI without a DB connection.
         log_table(ci_df, artifact_file="confidence_intervals.json")
 
     metrics_row = {
@@ -530,7 +538,7 @@ def main() -> None:
         "top_20pct_capture_rate": round(float(final_metrics["top_20pct_capture_rate"]), 2),
         "git_commit": git_commit(),
     }
-    write_dashboard_tables(engine, hypothesis_rows, odds_df, metrics_row)
+    write_dashboard_tables(engine, hypothesis_rows, odds_df, ci_df, metrics_row)
 
     score_scoring_candidates(X, y, use_interactions, engine)
 

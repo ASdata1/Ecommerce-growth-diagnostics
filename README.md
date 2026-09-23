@@ -80,9 +80,25 @@ are used:
    commit it ran on and the exact feature set used, so a metric quoted anywhere is traceable back
    to what produced it; past runs are browsable in the MLflow UI. The run also writes its
    headline results — odds ratios, hypothesis-test p-values, and the top-line metrics — back to
-   the database as three small tables (`repeat_purchase_odds_ratios`,
-   `repeat_purchase_hypothesis_tests`, `repeat_purchase_model_metrics`), each row stamped with
-   `run_at` and the git commit, and mirrored to `Dashboard/exports/*.csv` for the dashboard.
+   the database as four small tables (`repeat_purchase_odds_ratios`,
+   `repeat_purchase_confidence_intervals`, `repeat_purchase_hypothesis_tests`,
+   `repeat_purchase_model_metrics`), each row stamped with `run_at` and the git commit, and
+   mirrored to `Dashboard/exports/*.csv` for the dashboard.
+   **Decision: why the confidence intervals come from a second, unregularized model.**
+   [`src/confidence_interval.py`](src/confidence_interval.py) attaches a 95% Wald CI to each
+   feature's log-odds coefficient — but the *deployed* model is L2-regularized (sklearn's default
+   penalty) and fit with `class_weight="balanced"`, and regularized, reweighted coefficients don't
+   have a clean closed-form standard error, so a Wald CI can't legitimately be put on them
+   directly. Rather than approximate that, the module fits a **second, unregularized, unweighted
+   `statsmodels.Logit`** on the exact same preprocessed design matrix (the deployed pipeline's own
+   fitted preprocessing step — imputer, scaler, one-hot encoder — is reused as-is, not
+   reimplemented), purely for inference. This is the same split the project already draws for the
+   interaction-terms likelihood-ratio test: one model tuned for predictive performance, a separate
+   one used only for hypothesis testing/inference, because a class-imbalance correction changes
+   predicted probabilities and decision thresholds, not the consistency of an unweighted MLE
+   estimate. The two models' point estimates are reported side by side (`coefficient_statsmodels`
+   vs. `coefficient_sklearn_deployed`) rather than treated as interchangeable, since they can be
+   close but aren't identical.
 6. **Power BI dashboard** — built from the CSV exports in `Dashboard/exports/`: the funnel, the
    cohort-retention heatmap, the regional value/volume cut, and a repeat-purchase drivers page
    from the odds-ratio and hypothesis-test tables above. Not yet assembled — see *Where this is
@@ -119,10 +135,12 @@ are used:
   de Janeiro repeat more than those in Ceará. These are `class_weight="balanced"` point estimates
   from the deployed, L2-regularized model; [`src/confidence_interval.py`](src/confidence_interval.py)
   fits an unregularized companion model on the same design matrix to attach a 95% Wald confidence
-  interval to each one (logged to MLflow as a table artifact on every `final-evaluation` run, not
-  yet in the CSV/dashboard exports). The product-category and region drivers above are among the
-  ones whose interval excludes zero; `customer_seller_distance_km` does too (see next point) —
-  `same_state` and `seller_state_seller_count` don't clear that bar.
+  interval to each one (see the *decision* note under `src/repeat_purchase_analysis.py` above for
+  why), logged to both MLflow (as a table artifact on every `final-evaluation` run) and the
+  `repeat_purchase_confidence_intervals` table / `Dashboard/exports/*.csv`. The product-category
+  and region drivers above are among the ones whose interval excludes zero;
+  `customer_seller_distance_km` does too (see next point) — `same_state` and
+  `seller_state_seller_count` don't clear that bar.
 - **Interaction terms didn't earn their place** — adding pairwise numeric interactions improved
   model fit significantly (likelihood-ratio test p=0.012) but added no cross-validated PR-AUC, so
   the simpler, interpretable model is the one reported.
@@ -149,10 +167,10 @@ Planned next steps:
   drivers). Until then, the [HTML dashboard](https://claude.ai/artifact/ULMkaLkcgrCmd6pFdqADDu)
   linked above stands in as a temporary fix, covering the same pages from the same CSV exports.
 
-- **Surface the confidence intervals outside MLflow.** `src/confidence_interval.py`'s per-feature
-  CIs are currently only logged to MLflow as a table artifact; add them to the
-  `repeat_purchase_odds_ratios` table (DB + `Dashboard/exports/*.csv`) so the dashboard's
-  repeat-purchase-drivers page can show uncertainty next to each bar, not just the point estimate.
+- **Show the confidence intervals on the dashboard.** They're now in the
+  `repeat_purchase_confidence_intervals` table / `Dashboard/exports/*.csv`; the dashboard's
+  repeat-purchase-drivers page still needs to join them onto the odds-ratio bar chart to show
+  uncertainty next to each point estimate.
 
 - **A written experiment design (not yet run)** for evaluating a retention campaign:
   - **The causal question the model can't answer.** The odds ratios say fashion-accessory first
