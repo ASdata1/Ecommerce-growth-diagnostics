@@ -21,16 +21,21 @@ analysis script (see *How it's built* below).
 
 ## Result
 
-| Metric | Model | Baseline |
-|---|---|---|
-| ROC-AUC | 0.59 | 0.50 (random) |
-| PR-AUC | 0.052 | 0.033 (base rate) |
-| Top-10% decile capture | 16.8% of repeaters (1.7x lift) | 10% (random) |
-| Top-20% decile capture | 30.5% of repeaters | 20% (random) |
+| Metric | Model | 95% bootstrap CI | Baseline |
+|---|---|---|---|
+| ROC-AUC | 0.59 | [0.57, 0.62] | 0.50 (random) |
+| PR-AUC | 0.052 | [0.044, 0.064] | 0.033 (base rate) |
+| Top-10% decile capture | 16.8% of repeaters (1.7x lift) | [13.9%, 20.0%] | 10% (random) |
+| Top-20% decile capture | 30.5% of repeaters | [26.8%, 34.1%] | 20% (random) |
 
 Repeat purchase is rare (3.3% of 83,644 first-time customers) and only
 weakly predictable from first-order data — not a reliable classifier,
-but useful for ranking/targeting.
+but useful for ranking/targeting. The CI is a percentile bootstrap over the
+held-out test set (1,000 resamples, see `src/confidence_interval.py`'s
+`bootstrap_metric_cis()`) — it's what says the ROC-AUC edge over random is
+real rather than sampling noise (CI excludes 0.50), and puts a range on how
+much the top-decile capture rate would move on a different sample of the
+same customers.
 
 ## The data
 
@@ -80,25 +85,30 @@ are used:
    commit it ran on and the exact feature set used, so a metric quoted anywhere is traceable back
    to what produced it; past runs are browsable in the MLflow UI. The run also writes its
    headline results — odds ratios, hypothesis-test p-values, and the top-line metrics — back to
-   the database as four small tables (`repeat_purchase_odds_ratios`,
-   `repeat_purchase_confidence_intervals`, `repeat_purchase_hypothesis_tests`,
-   `repeat_purchase_model_metrics`), each row stamped with `run_at` and the git commit, and
-   mirrored to `Dashboard/exports/*.csv` for the dashboard.
-   **Decision: why the confidence intervals come from a second, unregularized model.**
-   [`src/confidence_interval.py`](src/confidence_interval.py) attaches a 95% Wald CI to each
-   feature's log-odds coefficient — but the *deployed* model is L2-regularized (sklearn's default
-   penalty) and fit with `class_weight="balanced"`, and regularized, reweighted coefficients don't
-   have a clean closed-form standard error, so a Wald CI can't legitimately be put on them
-   directly. Rather than approximate that, the module fits a **second, unregularized, unweighted
-   `statsmodels.Logit`** on the exact same preprocessed design matrix (the deployed pipeline's own
-   fitted preprocessing step — imputer, scaler, one-hot encoder — is reused as-is, not
-   reimplemented), purely for inference. This is the same split the project already draws for the
-   interaction-terms likelihood-ratio test: one model tuned for predictive performance, a separate
-   one used only for hypothesis testing/inference, because a class-imbalance correction changes
-   predicted probabilities and decision thresholds, not the consistency of an unweighted MLE
-   estimate. The two models' point estimates are reported side by side (`coefficient_statsmodels`
-   vs. `coefficient_sklearn_deployed`) rather than treated as interchangeable, since they can be
-   close but aren't identical.
+   the database as five small tables (`repeat_purchase_odds_ratios`,
+   `repeat_purchase_confidence_intervals`, `repeat_purchase_metric_confidence_intervals`,
+   `repeat_purchase_hypothesis_tests`, `repeat_purchase_model_metrics`), each row stamped with
+   `run_at` and the git commit, and mirrored to `Dashboard/exports/*.csv` for the dashboard.
+   **Decision: two different CI methods for two different kinds of quantity.**
+   [`src/confidence_interval.py`](src/confidence_interval.py) has two functions, deliberately not
+   one. `compute_confidence_intervals()` attaches a 95% Wald CI to each *feature's log-odds
+   coefficient* — but the *deployed* model is L2-regularized (sklearn's default penalty) and fit
+   with `class_weight="balanced"`, and regularized, reweighted coefficients don't have a clean
+   closed-form standard error, so a Wald CI can't legitimately be put on them directly. Rather than
+   approximate that, it fits a **second, unregularized, unweighted `statsmodels.Logit`** on the
+   exact same preprocessed design matrix (the deployed pipeline's own fitted preprocessing step —
+   imputer, scaler, one-hot encoder — is reused as-is, not reimplemented), purely for inference.
+   This is the same split the project already draws for the interaction-terms likelihood-ratio
+   test: one model tuned for predictive performance, a separate one used only for hypothesis
+   testing/inference, because a class-imbalance correction changes predicted probabilities and
+   decision thresholds, not the consistency of an unweighted MLE estimate. The two models' point
+   estimates are reported side by side (`coefficient_statsmodels` vs. `coefficient_sklearn_deployed`)
+   rather than treated as interchangeable, since they can be close but aren't identical.
+   `bootstrap_metric_cis()` instead answers a different question — how stable is a *held-out test
+   metric* (ROC-AUC, PR-AUC, top-10%/20% capture rate)? Those aren't model coefficients and have no
+   closed-form standard error either way, so it resamples the test set with replacement 1,000
+   times, recomputes every metric per resample, and reports the percentile interval — the standard
+   bootstrap approach for a statistic with no analytic formula.
 6. **Power BI dashboard** — built from the CSV exports in `Dashboard/exports/`: the funnel, the
    cohort-retention heatmap, the regional value/volume cut, and a repeat-purchase drivers page
    from the odds-ratio and hypothesis-test tables above. Not yet assembled — see *Where this is

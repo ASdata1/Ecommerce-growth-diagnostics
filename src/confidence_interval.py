@@ -1,5 +1,12 @@
 """
-Wald confidence intervals for the logistic regression's log-odds coefficients.
+Confidence intervals for the repeat-purchase model: Wald CIs on the logistic
+regression's log-odds coefficients (compute_confidence_intervals()), and
+bootstrap CIs on the held-out test set's headline metrics
+(bootstrap_metric_cis()). Two different methods because they answer two
+different questions with two different kinds of quantity - a fitted
+coefficient (closed-form standard error, if the model is unregularized) vs. a
+metric computed from predictions on one sample (no closed form; resampling
+is the standard way to get its sampling distribution).
 
 odds_ratio_table() in repeat_purchase_analysis.py reports point-estimate
 log-odds from the DEPLOYED sklearn pipeline - L2-regularized (LogisticRegression's
@@ -30,6 +37,7 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 import statsmodels.api as sm
+from sklearn.metrics import average_precision_score, roc_auc_score
 from sklearn.pipeline import Pipeline
 
 
@@ -49,7 +57,12 @@ def _categorical_reference_levels_to_drop(preprocessor) -> set[str]:
     _, cat_pipeline, cat_columns = next(t for t in preprocessor.transformers_ if t[0] == "cat")
     ohe = cat_pipeline.named_steps["encode"]
     output_names = ohe.get_feature_names_out(cat_columns)
-    return {f"cat__{next(name for name in output_names if name.startswith(f'{col}_'))}" for col in cat_columns}
+
+    drop_names = set()
+    for col in cat_columns:
+        first_level = next(name for name in output_names if name.startswith(f"{col}_"))
+        drop_names.add(f"cat__{first_level}")
+    return drop_names
 
 
 def compute_confidence_intervals(
@@ -134,5 +147,71 @@ def compute_confidence_intervals(
         .round(4)
         .to_string(index=False)
     )
+
+    return result
+
+
+def _test_set_metrics(y_true: np.ndarray, y_proba: np.ndarray, top_pcts: tuple[float, ...]) -> dict[str, float]:
+    row = {
+        "roc_auc": roc_auc_score(y_true, y_proba),
+        "pr_auc": average_precision_score(y_true, y_proba),
+    }
+    for pct in top_pcts:
+        k = int(len(y_true) * pct)
+        top_idx = np.argsort(-y_proba)[:k]
+        row[f"top_{int(pct * 100)}pct_capture_rate"] = 100 * y_true[top_idx].sum() / max(y_true.sum(), 1)
+    return row
+
+
+def bootstrap_metric_cis(
+    y_true: pd.Series | np.ndarray,
+    y_proba: np.ndarray,
+    n_boot: int = 1000,
+    alpha: float = 0.05,
+    top_pcts: tuple[float, ...] = (0.1, 0.2),
+    random_state: int = 42,
+) -> pd.DataFrame:
+    """
+    Percentile bootstrap CIs on the held-out test set's headline metrics
+    (ROC-AUC, PR-AUC, top-k% decile capture rate).
+
+    The Wald approach above only works for a fitted model's coefficients -
+    these are metrics computed from predictions on one fixed test set, with no
+    closed-form standard error, so instead this resamples (y_true, y_proba)
+    pairs WITH REPLACEMENT `n_boot` times, recomputes every metric on each
+    resample, and reports the alpha-level percentile interval of that
+    distribution. A resample where every row (or no row) is a repeat purchaser
+    makes ROC-AUC/PR-AUC undefined and is skipped - rare at this class
+    imbalance's sample size, but not impossible.
+
+    This is what actually answers "is 16.8% top-decile capture a reliable
+    number, or could it just as easily have been 12% on a different sample of
+    the same customers?" - a question the point estimate alone can't answer.
+    """
+    y_true = np.asarray(y_true)
+    y_proba = np.asarray(y_proba)
+    n = len(y_true)
+    rng = np.random.default_rng(random_state)
+
+    point = _test_set_metrics(y_true, y_proba, top_pcts)
+
+    boot_rows = []
+    while len(boot_rows) < n_boot:
+        idx = rng.integers(0, n, n)
+        yt, yp = y_true[idx], y_proba[idx]
+        if yt.sum() == 0 or yt.sum() == n:
+            continue
+        boot_rows.append(_test_set_metrics(yt, yp, top_pcts))
+    boot_df = pd.DataFrame(boot_rows)
+
+    result = pd.DataFrame({
+        "metric": list(point.keys()),
+        "point_estimate": list(point.values()),
+        "ci_lower": [boot_df[m].quantile(alpha / 2) for m in point],
+        "ci_upper": [boot_df[m].quantile(1 - alpha / 2) for m in point],
+    })
+
+    print(f"\n--- {alpha:.0%}-level bootstrap confidence intervals on test-set metrics ({n_boot} resamples) ---")
+    print(result.round(4).to_string(index=False))
 
     return result

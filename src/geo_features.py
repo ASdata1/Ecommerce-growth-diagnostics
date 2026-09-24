@@ -25,9 +25,9 @@ def add_geo_features(df: pd.DataFrame) -> pd.DataFrame:
     """Adds customer_seller_distance_km and same_state to a features DataFrame
     that already has customer_lat/lng, seller_lat/lng, customer_state,
     seller_state (from either repeat_purchase_features.sql or
-    repeat_purchase_scoring_candidates.sql, either dialect). Missing
-    coordinates/state produce NaN, not a dropped row - same treatment any other
-    missing numeric/categorical feature gets from the model pipeline's imputer.
+    repeat_purchase_scoring_candidates.sql). Missing coordinates/state produce
+    NaN, not a dropped row - same treatment any other missing
+    numeric/categorical feature gets from the model pipeline's imputer.
     """
     df = df.copy()
     df["customer_seller_distance_km"] = haversine_km(

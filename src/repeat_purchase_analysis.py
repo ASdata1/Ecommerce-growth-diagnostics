@@ -18,7 +18,6 @@ dataset (see the EDA notebook / cohort_retention.sql finding). That means:
   - accuracy is a useless headline metric - PR-AUC and recall are used instead
   - class_weight="balanced" is used so the rare positive class isn't
     ignored during training
-  
 
 Validation strategy: a single 80/20 train/test split, with 5-fold
 STRATIFIED cross-validation *inside* the training set for the one model
@@ -42,7 +41,7 @@ to explain to a stakeholder, so the bar to include them is deliberately high.
 Run: python src/repeat_purchase_analysis.py
 (after src/etl.py has been run, so data/olist.db exists and includes the
 order_reviews and products tables, and after the EDA notebook has been
-reviewed.
+reviewed).
 """
 
 from datetime import datetime, timezone
@@ -67,7 +66,7 @@ from sklearn.model_selection import StratifiedKFold, train_test_split
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OneHotEncoder, PolynomialFeatures, StandardScaler
 
-from confidence_interval import compute_confidence_intervals
+from confidence_interval import bootstrap_metric_cis, compute_confidence_intervals
 from db import get_engine
 from experiment_tracking import git_commit, log_table, track_run
 from geo_features import add_geo_features
@@ -93,9 +92,37 @@ NUMERIC_FEATURES = [
     "seller_state_seller_count",
 ]
 
-
 CATEGORICAL_FEATURES = ["customer_state", "payment_type", "product_category"]
 TARGET = "repeat_purchase"
+
+
+def _hypothesis_row(
+    hypothesis: str,
+    test: str,
+    statistic_name: str,
+    statistic: float,
+    p_value: float,
+    dof: float | None,
+    detail: str,
+    effect_size_name: str | None = None,
+    effect_size: float | None = None,
+) -> dict:
+    """One row of the hypothesis-test table's shared schema, used by both
+    run_hypothesis_tests() (H1, H2) and likelihood_ratio_test() - keeps three
+    call sites from each redefining the same 10 keys, where a typo'd key name
+    would silently drop a column instead of raising."""
+    return {
+        "hypothesis": hypothesis,
+        "test": test,
+        "statistic_name": statistic_name,
+        "statistic": float(statistic),
+        "p_value": float(p_value),
+        "dof": float(dof) if dof is not None else None,
+        "effect_size_name": effect_size_name,
+        "effect_size": float(effect_size) if effect_size is not None else None,
+        "significant_05": bool(p_value < 0.05),
+        "detail": detail,
+    }
 
 
 def load_features(engine=None) -> pd.DataFrame:
@@ -115,9 +142,9 @@ def run_hypothesis_tests(df: pd.DataFrame) -> list[dict]:
 
     # H1: mean review score differs between repeat and one-time customers (among
     # customers who left one the model can use - review_score is the gated column,
-    # so this compares one-timers against repeaters' 
-    repeat_scores = df.loc[df[TARGET] == 1, "review_score"].dropna() 
-    one_time_scores = df.loc[df[TARGET] == 0, "review_score"].dropna()  
+    # so this compares one-timers against repeaters' known review scores)
+    repeat_scores = df.loc[df[TARGET] == 1, "review_score"].dropna()
+    one_time_scores = df.loc[df[TARGET] == 0, "review_score"].dropna()
     t_stat, p_val = ttest_ind(repeat_scores, one_time_scores, equal_var=False)  # Welch's t-test
     # pooled-SD Cohen's d, so the effect size sits next to the p-value on the
     # dashboard - the finding is "significant but trivial" and the size is the point.
@@ -131,39 +158,35 @@ def run_hypothesis_tests(df: pd.DataFrame) -> list[dict]:
         f"vs one-time (n={n2}, mean={one_time_scores.mean():.2f}): "
         f"t={t_stat:.2f}, p={p_val:.4f}, Cohen's d={cohens_d:.3f}"
     )
-    rows.append({
-        "hypothesis": "Review score differs: repeat vs one-time buyers",
-        "test": "Welch's t-test",
-        "statistic_name": "t",
-        "statistic": float(t_stat),
-        "p_value": float(p_val),
-        "dof": None,
-        "effect_size_name": "Cohen's d",
-        "effect_size": float(cohens_d),
-        "significant_05": bool(p_val < 0.05),
-        "detail": (
+    rows.append(_hypothesis_row(
+        hypothesis="Review score differs: repeat vs one-time buyers",
+        test="Welch's t-test",
+        statistic_name="t",
+        statistic=t_stat,
+        p_value=p_val,
+        dof=None,
+        effect_size_name="Cohen's d",
+        effect_size=cohens_d,
+        detail=(
             f"repeat mean={repeat_scores.mean():.2f} (n={n1:,}) vs "
             f"one-time mean={one_time_scores.mean():.2f} (n={n2:,})"
         ),
-    })
+    ))
 
     # H2: repeat-purchase rate differs by payment type
     contingency = pd.crosstab(df["payment_type"], df[TARGET])
     chi2_stat, p_val_chi2, dof, _ = chi2_contingency(contingency)
     print(f"\nPayment type vs repeat purchase: chi2={chi2_stat:.2f}, dof={dof}, p={p_val_chi2:.4f}")
     print(contingency.assign(repeat_rate_pct=lambda d: round(100 * d[1] / (d[0] + d[1]), 2)))
-    rows.append({
-        "hypothesis": "Repeat-purchase rate differs by payment type",
-        "test": "Chi-square test of independence",
-        "statistic_name": "chi2",
-        "statistic": float(chi2_stat),
-        "p_value": float(p_val_chi2),
-        "dof": float(dof),
-        "effect_size_name": None,
-        "effect_size": None,
-        "significant_05": bool(p_val_chi2 < 0.05),
-        "detail": f"{contingency.shape[0]} payment types compared",
-    })
+    rows.append(_hypothesis_row(
+        hypothesis="Repeat-purchase rate differs by payment type",
+        test="Chi-square test of independence",
+        statistic_name="chi2",
+        statistic=chi2_stat,
+        p_value=p_val_chi2,
+        dof=dof,
+        detail=f"{contingency.shape[0]} payment types compared",
+    ))
 
     return rows
 
@@ -199,7 +222,7 @@ def cross_validate_pr_auc(interaction_terms: bool, X: pd.DataFrame, y: pd.Series
     train-fold vs validation-fold gap as an overfitting check. Builds a fresh
     pipeline per fold (rather than cloning one passed in) so there's no risk of
     fold N reusing a fitted transformer from fold N-1."""
-    skf = StratifiedKFold(n_splits=5, shuffle=True, random_state=42) # use statified folds to maintain class distbution in each fold
+    skf = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
     train_scores, val_scores = [], []
 
     for train_idx, val_idx in skf.split(X, y):
@@ -211,9 +234,8 @@ def cross_validate_pr_auc(interaction_terms: bool, X: pd.DataFrame, y: pd.Series
         val_scores.append(average_precision_score(y.iloc[val_idx], val_proba))
 
     train_mean, val_mean = np.mean(train_scores), np.mean(val_scores)
-    print(
-        f"{label}: CV train PR-AUC={train_mean:.3f}, CV val PR-AUC={val_mean:.3f} ")
-    return val_mean # type: ignore
+    print(f"{label}: CV train PR-AUC={train_mean:.3f}, CV val PR-AUC={val_mean:.3f}")
+    return float(val_mean)
 
 
 def likelihood_ratio_test(X_train: pd.DataFrame, y_train: pd.Series) -> tuple[float, dict]:
@@ -241,7 +263,7 @@ def likelihood_ratio_test(X_train: pd.DataFrame, y_train: pd.Series) -> tuple[fl
     model_base = sm.Logit(y_train.to_numpy(), X_base).fit(disp=0)
     model_interact = sm.Logit(y_train.to_numpy(), X_interact).fit(disp=0)
 
-    lr_stat = 2 * (model_interact.llf - model_base.llf) #log liklihood ratio stat
+    lr_stat = 2 * (model_interact.llf - model_base.llf)  # likelihood-ratio statistic
     df_diff = X_interact.shape[1] - X_base.shape[1]
     p_value = chi2_dist.sf(lr_stat, df_diff)
 
@@ -254,21 +276,18 @@ def likelihood_ratio_test(X_train: pd.DataFrame, y_train: pd.Series) -> tuple[fl
     else:
         print("-> not a statistically significant improvement - stick with the simpler model.")
 
-    row = {
-        "hypothesis": "Pairwise numeric interactions improve model fit",
-        "test": "Likelihood-ratio test",
-        "statistic_name": "LR chi2",
-        "statistic": float(lr_stat),
-        "p_value": float(p_value),
-        "dof": float(df_diff),
-        "effect_size_name": None,
-        "effect_size": None,
-        "significant_05": bool(p_value < 0.05),
-        "detail": (
+    row = _hypothesis_row(
+        hypothesis="Pairwise numeric interactions improve model fit",
+        test="Likelihood-ratio test",
+        statistic_name="LR chi2",
+        statistic=lr_stat,
+        p_value=p_value,
+        dof=df_diff,
+        detail=(
             f"base log-likelihood={model_base.llf:.1f} ({X_base.shape[1]} params) vs "
             f"+interactions={model_interact.llf:.1f} ({X_interact.shape[1]} params)"
         ),
-    }
+    )
     return float(p_value), row
 
 
@@ -288,7 +307,7 @@ def _rank_and_decile(scores: pd.DataFrame) -> pd.DataFrame:
 
 def evaluate_on_test(
     pipeline: Pipeline, X_train, y_train, X_test, y_test, ids_test: pd.Series, label: str, engine
-) -> tuple[dict, pd.DataFrame, pd.DataFrame]:
+) -> tuple[dict, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     print(f"\n=== Final held-out test evaluation: {label} ===")
     baseline = DummyClassifier(strategy="most_frequent").fit(X_train, y_train)
     print("--- Baseline (always predict majority class) ---")
@@ -338,7 +357,8 @@ def evaluate_on_test(
 
     odds_df = odds_ratio_table(pipeline)
     ci_df = compute_confidence_intervals(pipeline, X_train, y_train)
-    return metrics, odds_df, ci_df
+    metric_ci_df = bootstrap_metric_cis(y_test, y_proba)
+    return metrics, odds_df, ci_df, metric_ci_df
 
 
 def score_scoring_candidates(X: pd.DataFrame, y: pd.Series, interaction_terms: bool, engine) -> None:
@@ -417,19 +437,28 @@ def odds_ratio_table(pipeline: Pipeline) -> pd.DataFrame:
 
 
 def write_dashboard_tables(
-    engine, hypothesis_rows: list[dict], odds_df: pd.DataFrame, ci_df: pd.DataFrame, metrics_row: dict
+    engine,
+    hypothesis_rows: list[dict],
+    odds_df: pd.DataFrame,
+    ci_df: pd.DataFrame,
+    metric_ci_df: pd.DataFrame,
+    metrics_row: dict,
 ) -> None:
-    """Persist the model's headline results as four small tables in the same DB
+    """Persist the model's headline results as five small tables in the same DB
     the per-customer score tables go to, so the dashboard's "Repeat-purchase
     drivers" page binds to them directly instead of pasting console output:
 
-      repeat_purchase_odds_ratios         - one row per model feature (bar chart)
+      repeat_purchase_odds_ratios          - one row per model feature (bar chart)
       repeat_purchase_confidence_intervals - one row per feature, Wald CI on the
-                                             unregularized companion model (see
-                                             src/confidence_interval.py) - the
-                                             uncertainty band around the bars above
-      repeat_purchase_hypothesis_tests    - one row per test, with p-values
-      repeat_purchase_model_metrics       - single row of headline metrics (KPI cards)
+                                              unregularized companion model (see
+                                              src/confidence_interval.py) - the
+                                              uncertainty band around the bars above
+      repeat_purchase_metric_confidence_intervals - one row per headline metric
+                                              (ROC-AUC, PR-AUC, top-10%/20% capture
+                                              rate), bootstrap CI on the held-out
+                                              test set
+      repeat_purchase_hypothesis_tests     - one row per test, with p-values
+      repeat_purchase_model_metrics        - single row of headline metrics (KPI cards)
 
     Each is also written to Dashboard/exports/<name>.csv, so the web dashboard
     can load the flat files without a DB connection.
@@ -446,6 +475,9 @@ def write_dashboard_tables(
             model=metrics_row["model"], run_at=run_at, git_commit=commit
         ),
         "repeat_purchase_confidence_intervals": ci_df.assign(
+            model=metrics_row["model"], run_at=run_at, git_commit=commit
+        ),
+        "repeat_purchase_metric_confidence_intervals": metric_ci_df.assign(
             model=metrics_row["model"], run_at=run_at, git_commit=commit
         ),
         "repeat_purchase_hypothesis_tests": pd.DataFrame(hypothesis_rows).assign(
@@ -469,7 +501,7 @@ def main() -> None:
     X = df[NUMERIC_FEATURES + CATEGORICAL_FEATURES]
     y = df[TARGET]
     ids = df["customer_unique_id"]
-    X_train, X_test, y_train, y_test, ids_train, ids_test = train_test_split(
+    X_train, X_test, y_train, y_test, _, ids_test = train_test_split(
         X, y, ids, test_size=0.2, stratify=y, random_state=42
     )
 
@@ -514,14 +546,15 @@ def main() -> None:
             "base_rate": round(float(y.mean()), 4),
         },
     ) as log:
-        final_metrics, odds_df, ci_df = evaluate_on_test(
+        final_metrics, odds_df, ci_df, metric_ci_df = evaluate_on_test(
             chosen, X_train, y_train, X_test, y_test, ids_test, label, engine
         )
         log(final_metrics)
-        # Also logged as an MLflow table artifact (in addition to the DB/CSV
-        # write in write_dashboard_tables() below) so a single run's CIs are
+        # Also logged as MLflow table artifacts (in addition to the DB/CSV
+        # writes in write_dashboard_tables() below) so a single run's CIs are
         # browsable in the MLflow UI without a DB connection.
         log_table(ci_df, artifact_file="confidence_intervals.json")
+        log_table(metric_ci_df, artifact_file="metric_confidence_intervals.json")
 
     metrics_row = {
         "model": label,
@@ -538,7 +571,7 @@ def main() -> None:
         "top_20pct_capture_rate": round(float(final_metrics["top_20pct_capture_rate"]), 2),
         "git_commit": git_commit(),
     }
-    write_dashboard_tables(engine, hypothesis_rows, odds_df, ci_df, metrics_row)
+    write_dashboard_tables(engine, hypothesis_rows, odds_df, ci_df, metric_ci_df, metrics_row)
 
     score_scoring_candidates(X, y, use_interactions, engine)
 

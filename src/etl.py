@@ -85,6 +85,25 @@ def load_sellers() -> pd.DataFrame:
     return df.drop_duplicates(subset=["seller_id"])
 
 
+# join columns get hit by every downstream query (and the referential
+# integrity tests) - without these, SQLite falls back to full table scans
+# per row on the joins/subqueries below
+INDEXES = {
+    "idx_orders_customer_id": "orders(customer_id)",
+    "idx_orders_order_id": "orders(order_id)",
+    "idx_order_items_order_id": "order_items(order_id)",
+    "idx_order_payments_order_id": "order_payments(order_id)",
+    "idx_customers_customer_id": "customers(customer_id)",
+    "idx_customers_customer_unique_id": "customers(customer_unique_id)",
+    "idx_order_reviews_order_id": "order_reviews(order_id)",
+    "idx_products_product_id": "products(product_id)",
+    "idx_geolocation_zip": "geolocation(geolocation_zip_code_prefix)",
+    "idx_sellers_seller_id": "sellers(seller_id)",
+    "idx_sellers_zip": "sellers(seller_zip_code_prefix)",
+    "idx_customers_zip": "customers(customer_zip_code_prefix)",
+}
+
+
 def main() -> None:
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     tables = {
@@ -103,21 +122,8 @@ def main() -> None:
             df.to_sql(name, conn, if_exists="replace", index=False)
             print(f"loaded {name}: {len(df):,} rows")
 
-        # join columns get hit by every downstream query (and the referential
-        # integrity tests) - without these, SQLite falls back to full table
-        # scans per row on the joins/subqueries below
-        conn.execute("CREATE INDEX IF NOT EXISTS idx_orders_customer_id ON orders(customer_id)")
-        conn.execute("CREATE INDEX IF NOT EXISTS idx_orders_order_id ON orders(order_id)")
-        conn.execute("CREATE INDEX IF NOT EXISTS idx_order_items_order_id ON order_items(order_id)")
-        conn.execute("CREATE INDEX IF NOT EXISTS idx_order_payments_order_id ON order_payments(order_id)")
-        conn.execute("CREATE INDEX IF NOT EXISTS idx_customers_customer_id ON customers(customer_id)")
-        conn.execute("CREATE INDEX IF NOT EXISTS idx_customers_customer_unique_id ON customers(customer_unique_id)")
-        conn.execute("CREATE INDEX IF NOT EXISTS idx_order_reviews_order_id ON order_reviews(order_id)")
-        conn.execute("CREATE INDEX IF NOT EXISTS idx_products_product_id ON products(product_id)")
-        conn.execute("CREATE INDEX IF NOT EXISTS idx_geolocation_zip ON geolocation(geolocation_zip_code_prefix)")
-        conn.execute("CREATE INDEX IF NOT EXISTS idx_sellers_seller_id ON sellers(seller_id)")
-        conn.execute("CREATE INDEX IF NOT EXISTS idx_sellers_zip ON sellers(seller_zip_code_prefix)")
-        conn.execute("CREATE INDEX IF NOT EXISTS idx_customers_zip ON customers(customer_zip_code_prefix)")
+        for name, target in INDEXES.items():
+            conn.execute(f"CREATE INDEX IF NOT EXISTS {name} ON {target}")
 
     print(f"\ndone -> {DB_PATH}")
 
