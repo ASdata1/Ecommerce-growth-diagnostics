@@ -1,0 +1,109 @@
+table repeat_purchase_odds_ratios
+	lineageTag: e65f7535-9cb9-431e-b42f-2b5c90e69cf4
+
+	measure 'Top Repeat Driver Callout' =
+			
+			VAR TopPositive = TOPN(1, repeat_purchase_odds_ratios, repeat_purchase_odds_ratios[odds_ratio], 0)
+			VAR TopPositiveLabel = MAXX(TopPositive, repeat_purchase_odds_ratios[feature])
+			VAR TopPositiveOR = MAXX(TopPositive, repeat_purchase_odds_ratios[odds_ratio])
+			VAR TopNegative = TOPN(1, repeat_purchase_odds_ratios, repeat_purchase_odds_ratios[odds_ratio], 1)
+			VAR TopNegativeLabel = MAXX(TopNegative, repeat_purchase_odds_ratios[feature])
+			VAR TopNegativeOR = MAXX(TopNegative, repeat_purchase_odds_ratios[odds_ratio])
+			RETURN
+			"<div style='font-family:Segoe UI,sans-serif;background:#fcfcfb;border:1px solid rgba(11,11,11,.10);border-radius:10px;padding:18px 20px;'>" &
+			  "<div style='font-size:11px;text-transform:uppercase;letter-spacing:.07em;color:#898781;margin-bottom:10px;'>What predicts repeat purchase</div>" &
+			  "<div style='display:flex;gap:16px;'>" &
+			    "<div><div style='font-size:20px;font-weight:600;color:#2a78d6;'>" & FORMAT(TopPositiveOR,"0.00") & "×</div><div style='font-size:12px;color:#52514e;margin-top:2px;'>" & TopPositiveLabel & "</div></div>" &
+			    "<div><div style='font-size:20px;font-weight:600;color:#e34948;'>" & FORMAT(TopNegativeOR,"0.00") & "×</div><div style='font-size:12px;color:#52514e;margin-top:2px;'>" & TopNegativeLabel & "</div></div>" &
+			  "</div>" &
+			"</div>"
+		lineageTag: 5ff62619-05e3-42c5-a31d-329864e52424
+
+	column feature
+		dataType: string
+		lineageTag: 74a28ad4-fbba-487d-9571-64d3bb021df4
+		summarizeBy: none
+		sourceColumn: feature
+
+		annotation SummarizationSetBy = Automatic
+
+	column coefficient
+		dataType: double
+		lineageTag: 37932501-7d82-4b47-8249-eb57e2e30f9f
+		summarizeBy: sum
+		sourceColumn: coefficient
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column odds_ratio
+		dataType: double
+		lineageTag: a1365580-d8a3-4156-9ed0-b22fc4530268
+		summarizeBy: sum
+		sourceColumn: odds_ratio
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column abs_coefficient
+		dataType: double
+		lineageTag: 4cd5a51b-c1a0-48ca-8f08-145efae0cf44
+		summarizeBy: sum
+		sourceColumn: abs_coefficient
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column direction
+		dataType: string
+		lineageTag: 24a32f9e-040e-4a9d-9f7f-7c4343b9e0d1
+		summarizeBy: none
+		sourceColumn: direction
+
+		annotation SummarizationSetBy = Automatic
+
+	column model
+		dataType: string
+		lineageTag: 8579646c-a219-44ca-b52c-a86f1f207fa0
+		summarizeBy: none
+		sourceColumn: model
+
+		annotation SummarizationSetBy = Automatic
+
+	column run_at
+		dataType: dateTime
+		formatString: General Date
+		lineageTag: 318a9293-e034-49ed-9ef0-5c10712e2e0d
+		summarizeBy: none
+		sourceColumn: run_at
+
+		variation Variation
+			isDefault
+			relationship: e7bf653c-a063-452a-be0c-5efc78db2171
+			defaultHierarchy: LocalDateTable_87ad67a9-7d57-47d1-9a42-6a36596dd803.'Date Hierarchy'
+
+		annotation SummarizationSetBy = Automatic
+
+	column git_commit
+		dataType: string
+		lineageTag: 458f52a2-c2b1-477c-87ea-9943bd88f49f
+		summarizeBy: none
+		sourceColumn: git_commit
+
+		annotation SummarizationSetBy = Automatic
+
+	partition repeat_purchase_odds_ratios = m
+		mode: import
+		source =
+				let
+				  Source = Csv.Document(File.Contents("C:\Users\04ama\OneDrive\job-hunt\portfolio-projects\Ecommerce-growth-analytics\power_bi\exports\repeat_purchase_odds_ratios.csv"), [Delimiter = ",", Columns = 8, QuoteStyle = QuoteStyle.None]),
+				  #"Promoted headers" = Table.PromoteHeaders(Source, [PromoteAllScalars = true]),
+				  #"Changed column type" = Table.TransformColumnTypes(#"Promoted headers", {{"feature", type text}, {"coefficient", type number}, {"odds_ratio", type number}, {"abs_coefficient", type number}, {"direction", type text}, {"model", type text}, {"run_at", type datetime}, {"git_commit", type text}}, "en-US")
+				in
+				  #"Changed column type"
+
+	annotation PBI_ResultType = Table
+

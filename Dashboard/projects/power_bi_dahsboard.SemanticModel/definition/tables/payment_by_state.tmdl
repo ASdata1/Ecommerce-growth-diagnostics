@@ -1,0 +1,52 @@
+table payment_by_state
+	lineageTag: 86f751da-bd11-414a-b8c4-933f39ed5058
+
+	column customer_state
+		dataType: string
+		lineageTag: a1b8648e-5073-405b-8062-b32a691705b1
+		summarizeBy: none
+		sourceColumn: customer_state
+
+		annotation SummarizationSetBy = Automatic
+
+	column avg_payment_val
+		dataType: double
+		lineageTag: 4a52c00a-4514-41bf-b885-2b054a9a852d
+		summarizeBy: sum
+		sourceColumn: avg_payment_val
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column num_orders
+		dataType: int64
+		formatString: 0
+		lineageTag: 0f965ee4-5d4e-4c14-ab60-85d7796d12da
+		summarizeBy: sum
+		sourceColumn: num_orders
+
+		annotation SummarizationSetBy = Automatic
+
+	column avg_payment_instals
+		dataType: double
+		lineageTag: b88c6a99-3e10-45d1-bda7-e428a374ede1
+		summarizeBy: sum
+		sourceColumn: avg_payment_instals
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	partition payment_by_state = m
+		mode: import
+		source =
+				let
+				  Source = Csv.Document(File.Contents("C:\Users\04ama\OneDrive\job-hunt\portfolio-projects\Ecommerce-growth-analytics\power_bi\exports\payment_by_state.csv"), [Delimiter = ",", Columns = 4, QuoteStyle = QuoteStyle.None]),
+				  #"Promoted headers" = Table.PromoteHeaders(Source, [PromoteAllScalars = true]),
+				  #"Changed column type" = Table.TransformColumnTypes(#"Promoted headers", {{"customer_state", type text}, {"avg_payment_val", type number}, {"num_orders", Int64.Type}, {"avg_payment_instals", type number}}, "en-US")
+				in
+				  #"Changed column type"
+
+	annotation PBI_ResultType = Table
+

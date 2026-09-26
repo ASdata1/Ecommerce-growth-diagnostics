@@ -1,0 +1,99 @@
+table cohort_retention
+	lineageTag: ab7bb588-be6b-42fa-82cf-3abf79e14ca2
+
+	measure 'Cohort Retention Strip' =
+			
+			VAR Cap = 0.75
+			VAR TileSize = 54
+			VAR Tiles =
+			    CONCATENATEX(
+			        cohort_retention,
+			        VAR R1 = cohort_retention[retention_month_1_pct]
+			        VAR SizeVal = cohort_retention[cohort_size]
+			        VAR Capped = IF(R1 > Cap, Cap, R1)
+			        VAR Intensity = FORMAT(ROUND(DIVIDE(Capped, Cap) * 100, 0), "0")
+			        VAR OutlineCSS = IF(SizeVal = 1, "outline:2px dashed #898781;outline-offset:-2px;", "")
+			        RETURN
+			        "<div title='" & FORMAT(cohort_retention[cohort_month],"mmm yyyy") & " · " & FORMAT(R1,"0.00") & "% retention · n=" & SizeVal & "' style='width:" & TileSize & "px;height:" & TileSize & "px;border-radius:8px;background:color-mix(in oklab, #fcfcfb, #2a78d6 " & Intensity & "%);" & OutlineCSS & "display:inline-block;margin:4px;'></div>",
+			        "",
+			        cohort_retention[cohort_month], 1
+			    )
+			RETURN
+			"<div style='font-family:Segoe UI,sans-serif;'><div style='display:flex;flex-wrap:wrap;'>" & Tiles & "</div><div style='font-size:14px;color:#898781;margin-top:14px;'>Tile shade = Month-1 retention, capped at 0.75% so the outlier cohort doesn't wash out the rest. Dashed border = single-customer cohort.</div></div>"
+		lineageTag: f8ec4eac-ccd7-4fa4-8bac-08e3b93386bc
+
+	column cohort_month
+		dataType: dateTime
+		formatString: Long Date
+		lineageTag: fbbb59d4-9316-4c42-b61d-acdadf581fa7
+		summarizeBy: none
+		sourceColumn: cohort_month
+
+		variation Variation
+			isDefault
+			relationship: c41f9007-fb30-4b69-bd6a-eda2759d3d74
+			defaultHierarchy: LocalDateTable_6e23a0d5-bddd-4a09-839b-4ea82e35fc7e.'Date Hierarchy'
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation UnderlyingDateTimeDataType = Date
+
+	column cohort_size
+		dataType: int64
+		formatString: 0
+		lineageTag: c8098c42-a703-4c77-97bf-d17fe34a9667
+		summarizeBy: sum
+		sourceColumn: cohort_size
+
+		annotation SummarizationSetBy = Automatic
+
+	column customers_active_month_1
+		dataType: int64
+		formatString: 0
+		lineageTag: f96834e5-c8f9-4b26-92b8-d543ecea6ccb
+		summarizeBy: sum
+		sourceColumn: customers_active_month_1
+
+		annotation SummarizationSetBy = Automatic
+
+	column retention_month_1_pct
+		dataType: double
+		lineageTag: a6194583-0b02-4c0c-b9af-8ade71eb3e14
+		summarizeBy: sum
+		sourceColumn: retention_month_1_pct
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column customers_active_month_2
+		dataType: int64
+		formatString: 0
+		lineageTag: fa25172a-5abb-4dfa-81a1-2648e04782cd
+		summarizeBy: sum
+		sourceColumn: customers_active_month_2
+
+		annotation SummarizationSetBy = Automatic
+
+	column retention_month_2_pct
+		dataType: double
+		lineageTag: e7b7274d-fb7c-4e2e-9909-0897c72c21c7
+		summarizeBy: sum
+		sourceColumn: retention_month_2_pct
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	partition cohort_retention = m
+		mode: import
+		source =
+				let
+				  Source = Csv.Document(File.Contents("C:\Users\04ama\OneDrive\job-hunt\portfolio-projects\Ecommerce-growth-analytics\power_bi\exports\cohort_retention.csv"), [Delimiter = ",", Columns = 6, QuoteStyle = QuoteStyle.None]),
+				  #"Promoted headers" = Table.PromoteHeaders(Source, [PromoteAllScalars = true]),
+				  #"Changed column type" = Table.TransformColumnTypes(#"Promoted headers", {{"cohort_month", type date}, {"cohort_size", Int64.Type}, {"customers_active_month_1", Int64.Type}, {"retention_month_1_pct", type number}, {"customers_active_month_2", Int64.Type}, {"retention_month_2_pct", type number}}, "en-US")
+				in
+				  #"Changed column type"
+
+	annotation PBI_ResultType = Table
+

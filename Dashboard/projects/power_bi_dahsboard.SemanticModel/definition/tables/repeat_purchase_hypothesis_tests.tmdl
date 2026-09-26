@@ -1,0 +1,149 @@
+table repeat_purchase_hypothesis_tests
+	lineageTag: 0aa8d660-ee04-4e7f-8802-68b906470f95
+
+	measure 'Hypothesis Test Cards' =
+			
+			VAR Cards =
+			    CONCATENATEX(
+			        repeat_purchase_hypothesis_tests,
+			        VAR PVal = repeat_purchase_hypothesis_tests[p_value]
+			        VAR Sig = repeat_purchase_hypothesis_tests[significant_05]
+			        VAR BadgeColor = IF(Sig, "#006300", "#898781")
+			        VAR BadgeLabel = IF(Sig, "significant", "not significant")
+			        RETURN
+			        "<div style='font-family:Segoe UI,sans-serif;background:#fcfcfb;border:1px solid rgba(11,11,11,.10);border-radius:10px;padding:22px 24px;flex:1;min-width:260px;'>" &
+			          "<div style='display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:14px;'>" &
+			            "<div style='font-size:17px;font-weight:600;color:#0b0b0b;line-height:1.4;'>" & repeat_purchase_hypothesis_tests[hypothesis] & "</div>" &
+			            "<div style='font-size:13px;padding:5px 11px;border-radius:100px;border:1px solid " & BadgeColor & ";color:" & BadgeColor & ";font-weight:600;white-space:nowrap;'>p = " & FORMAT(PVal,"0.000") & " · " & BadgeLabel & "</div>" &
+			          "</div>" &
+			          "<div style='font-size:15px;color:#52514e;line-height:1.65;'>" & repeat_purchase_hypothesis_tests[detail] & "</div>" &
+			        "</div>",
+			        "",
+			        repeat_purchase_hypothesis_tests[hypothesis], 1
+			    )
+			RETURN
+			"<div style='display:flex;flex-wrap:wrap;gap:18px;'>" & Cards & "</div>"
+		lineageTag: 26ebc5fd-c9ce-4629-9176-5b4714f33ef7
+
+	column hypothesis
+		dataType: string
+		lineageTag: c99c79fc-6716-4149-ab71-78f4dd71e130
+		summarizeBy: none
+		sourceColumn: hypothesis
+
+		annotation SummarizationSetBy = Automatic
+
+	column test
+		dataType: string
+		lineageTag: 7f6ad3c3-ef8b-4c99-80c4-4f808a3a5359
+		summarizeBy: none
+		sourceColumn: test
+
+		annotation SummarizationSetBy = Automatic
+
+	column statistic_name
+		dataType: string
+		lineageTag: d6af6885-ec14-467a-8c7e-d0bcf5d98004
+		summarizeBy: none
+		sourceColumn: statistic_name
+
+		annotation SummarizationSetBy = Automatic
+
+	column statistic
+		dataType: double
+		lineageTag: e20ae778-0563-42ce-989f-91ac9bc6d766
+		summarizeBy: sum
+		sourceColumn: statistic
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column p_value
+		dataType: double
+		lineageTag: 8dba5d04-56dd-468b-bd01-10cb6c248494
+		summarizeBy: sum
+		sourceColumn: p_value
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column dof
+		dataType: int64
+		formatString: 0
+		lineageTag: 4fc92b1f-4e5d-4d9e-bc05-deb319d24411
+		summarizeBy: sum
+		sourceColumn: dof
+
+		annotation SummarizationSetBy = Automatic
+
+	column effect_size_name
+		dataType: string
+		lineageTag: 12b976d8-d510-41a2-8a16-3589c43930be
+		summarizeBy: none
+		sourceColumn: effect_size_name
+
+		annotation SummarizationSetBy = Automatic
+
+	column effect_size
+		dataType: double
+		lineageTag: 2f1649ed-a3b4-4f44-bf84-0c7833882388
+		summarizeBy: sum
+		sourceColumn: effect_size
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column significant_05
+		dataType: boolean
+		formatString: """TRUE"";""TRUE"";""FALSE"""
+		lineageTag: 0bf21925-9309-4471-9e62-9e4febf38c47
+		summarizeBy: none
+		sourceColumn: significant_05
+
+		annotation SummarizationSetBy = Automatic
+
+	column detail
+		dataType: string
+		lineageTag: e4d3dc07-b7cd-490c-afc0-b294fd3977bf
+		summarizeBy: none
+		sourceColumn: detail
+
+		annotation SummarizationSetBy = Automatic
+
+	column run_at
+		dataType: dateTime
+		formatString: General Date
+		lineageTag: dc650163-0fde-4ccc-a4c0-95b74962a9b5
+		summarizeBy: none
+		sourceColumn: run_at
+
+		variation Variation
+			isDefault
+			relationship: 147a8bfd-ec6c-48fc-a1fb-bba7814edcc7
+			defaultHierarchy: LocalDateTable_b9813c2b-1fd8-4ffd-adb2-097e316df787.'Date Hierarchy'
+
+		annotation SummarizationSetBy = Automatic
+
+	column git_commit
+		dataType: string
+		lineageTag: 0ead59b7-d106-4c42-a72e-5ba37beeb58e
+		summarizeBy: none
+		sourceColumn: git_commit
+
+		annotation SummarizationSetBy = Automatic
+
+	partition repeat_purchase_hypothesis_tests = m
+		mode: import
+		source =
+				let
+				  Source = Csv.Document(File.Contents("C:\Users\04ama\OneDrive\job-hunt\portfolio-projects\Ecommerce-growth-analytics\power_bi\exports\repeat_purchase_hypothesis_tests.csv"), [Delimiter = ",", Columns = 12, QuoteStyle = QuoteStyle.None]),
+				  #"Promoted headers" = Table.PromoteHeaders(Source, [PromoteAllScalars = true]),
+				  #"Changed column type" = Table.TransformColumnTypes(#"Promoted headers", {{"hypothesis", type text}, {"test", type text}, {"statistic_name", type text}, {"statistic", type number}, {"p_value", type number}, {"dof", Int64.Type}, {"effect_size_name", type text}, {"effect_size", type number}, {"significant_05", type logical}, {"detail", type text}, {"run_at", type datetime}, {"git_commit", type text}}, "en-US")
+				in
+				  #"Changed column type"
+
+	annotation PBI_ResultType = Table
+

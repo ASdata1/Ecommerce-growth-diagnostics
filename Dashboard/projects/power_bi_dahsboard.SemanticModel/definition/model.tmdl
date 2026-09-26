@@ -1,0 +1,33 @@
+model Model
+	culture: en-GB
+	defaultPowerBIDataSourceVersion: powerBI_V3
+	sourceQueryCulture: en-GB
+	valueFilterBehavior: independent
+	dataAccessOptions
+		legacyRedirects
+		returnErrorValuesAsNull
+
+annotation __PBI_TimeIntelligenceEnabled = 1
+
+annotation PBI_QueryOrder = ["repeat_purchase_model_metrics","repeat_purchase_hypothesis_tests","repeat_purchase_odds_ratios","cohort_retention","funnel","payment_by_state","step_funnel","kpi_overview","orders_by_month"]
+
+annotation PBI_ProTooling = ["DevMode"]
+
+ref table repeat_purchase_model_metrics
+ref table DateTableTemplate_e7041d59-1f0e-4f08-a6b4-5781629e9cc6
+ref table LocalDateTable_e739357a-7305-4111-a606-f918d5663766
+ref table repeat_purchase_hypothesis_tests
+ref table LocalDateTable_b9813c2b-1fd8-4ffd-adb2-097e316df787
+ref table repeat_purchase_odds_ratios
+ref table LocalDateTable_87ad67a9-7d57-47d1-9a42-6a36596dd803
+ref table cohort_retention
+ref table LocalDateTable_6e23a0d5-bddd-4a09-839b-4ea82e35fc7e
+ref table funnel
+ref table payment_by_state
+ref table step_funnel
+ref table kpi_overview
+ref table orders_by_month
+ref table LocalDateTable_02143f03-db9f-4f4d-b69a-d9ce438addba
+
+ref cultureInfo en-GB
+

@@ -1,0 +1,33 @@
+relationship 086599d9-34d2-4ce8-bce8-2631c803dcd4
+	joinOnDateBehavior: datePartOnly
+	fromColumn: repeat_purchase_model_metrics.run_at
+	toColumn: LocalDateTable_e739357a-7305-4111-a606-f918d5663766.Date
+
+relationship 147a8bfd-ec6c-48fc-a1fb-bba7814edcc7
+	joinOnDateBehavior: datePartOnly
+	fromColumn: repeat_purchase_hypothesis_tests.run_at
+	toColumn: LocalDateTable_b9813c2b-1fd8-4ffd-adb2-097e316df787.Date
+
+relationship AutoDetected_f58f58b5-6b6b-4280-a4f3-c89063bbe938
+	fromColumn: repeat_purchase_hypothesis_tests.git_commit
+	toColumn: repeat_purchase_model_metrics.git_commit
+
+relationship e7bf653c-a063-452a-be0c-5efc78db2171
+	joinOnDateBehavior: datePartOnly
+	fromColumn: repeat_purchase_odds_ratios.run_at
+	toColumn: LocalDateTable_87ad67a9-7d57-47d1-9a42-6a36596dd803.Date
+
+relationship AutoDetected_8f6acce9-caed-4f56-bca0-144581341860
+	fromColumn: repeat_purchase_odds_ratios.model
+	toColumn: repeat_purchase_model_metrics.model
+
+relationship c41f9007-fb30-4b69-bd6a-eda2759d3d74
+	joinOnDateBehavior: datePartOnly
+	fromColumn: cohort_retention.cohort_month
+	toColumn: LocalDateTable_6e23a0d5-bddd-4a09-839b-4ea82e35fc7e.Date
+
+relationship 8067a062-a3ae-43ca-98df-d2ae627e4f7f
+	joinOnDateBehavior: datePartOnly
+	fromColumn: orders_by_month.month
+	toColumn: LocalDateTable_02143f03-db9f-4f4d-b69a-d9ce438addba.Date
+

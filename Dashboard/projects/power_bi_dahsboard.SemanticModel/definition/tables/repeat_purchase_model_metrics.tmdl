@@ -1,0 +1,152 @@
+table repeat_purchase_model_metrics
+	lineageTag: 6aed2595-2dfb-4003-9c36-f5b39761d20f
+
+	column model
+		dataType: string
+		lineageTag: 8603acdc-a8c5-45ba-bb5a-f1b1202f9269
+		summarizeBy: none
+		sourceColumn: model
+
+		annotation SummarizationSetBy = Automatic
+
+	column interaction_terms
+		dataType: boolean
+		formatString: """TRUE"";""TRUE"";""FALSE"""
+		lineageTag: 72657911-74cc-4022-86ff-a243edd5035b
+		summarizeBy: none
+		sourceColumn: interaction_terms
+
+		annotation SummarizationSetBy = Automatic
+
+	column n_customers
+		dataType: int64
+		formatString: 0
+		lineageTag: befae147-1d0f-4c7b-b06d-851823dfd748
+		summarizeBy: sum
+		sourceColumn: n_customers
+
+		annotation SummarizationSetBy = Automatic
+
+	column n_repeat
+		dataType: int64
+		formatString: 0
+		lineageTag: 97dc05c2-8be7-4cff-bce6-862ba332a100
+		summarizeBy: sum
+		sourceColumn: n_repeat
+
+		annotation SummarizationSetBy = Automatic
+
+	column base_rate
+		dataType: double
+		lineageTag: bbd2e02f-3ed7-462d-bcb2-9546dd12f82b
+		summarizeBy: sum
+		sourceColumn: base_rate
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column cv_pr_auc_base
+		dataType: double
+		lineageTag: 59f1344b-c3f2-45ba-9a95-ad32ccd2faa5
+		summarizeBy: sum
+		sourceColumn: cv_pr_auc_base
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column cv_pr_auc_interactions
+		dataType: double
+		lineageTag: 0b3fc5da-2cb6-4a51-b07e-4018224c4993
+		summarizeBy: sum
+		sourceColumn: cv_pr_auc_interactions
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column lr_test_p_value
+		dataType: double
+		lineageTag: c3b380fa-4cec-4c52-9819-5cb001f05245
+		summarizeBy: sum
+		sourceColumn: lr_test_p_value
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column roc_auc
+		dataType: double
+		lineageTag: 793a5db6-31d4-472e-8006-6cc2f8ea0b4c
+		summarizeBy: sum
+		sourceColumn: roc_auc
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column pr_auc
+		dataType: double
+		lineageTag: b7f71485-d102-4882-8b66-f327061096a5
+		summarizeBy: sum
+		sourceColumn: pr_auc
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column top_10pct_capture_rate
+		dataType: double
+		lineageTag: 0c9fb0bf-e707-4cb9-ab95-d0ae7b562f6c
+		summarizeBy: sum
+		sourceColumn: top_10pct_capture_rate
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column top_20pct_capture_rate
+		dataType: double
+		lineageTag: 6d8b9d3e-f7c9-4642-9dbb-e4f72f8efd68
+		summarizeBy: sum
+		sourceColumn: top_20pct_capture_rate
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column git_commit
+		dataType: string
+		lineageTag: 8a395b9d-3d1a-4a25-8370-847a4b6b432e
+		summarizeBy: none
+		sourceColumn: git_commit
+
+		annotation SummarizationSetBy = Automatic
+
+	column run_at
+		dataType: dateTime
+		formatString: General Date
+		lineageTag: cec713bf-9867-4960-96ec-242e9b76ba10
+		summarizeBy: none
+		sourceColumn: run_at
+
+		variation Variation
+			isDefault
+			relationship: 086599d9-34d2-4ce8-bce8-2631c803dcd4
+			defaultHierarchy: LocalDateTable_e739357a-7305-4111-a606-f918d5663766.'Date Hierarchy'
+
+		annotation SummarizationSetBy = Automatic
+
+	partition repeat_purchase_model_metrics = m
+		mode: import
+		source =
+				let
+				  Source = Csv.Document(File.Contents("C:\Users\04ama\OneDrive\job-hunt\portfolio-projects\Ecommerce-growth-analytics\power_bi\exports\repeat_purchase_model_metrics.csv"), [Delimiter = ",", Columns = 14, QuoteStyle = QuoteStyle.None]),
+				  #"Promoted headers" = Table.PromoteHeaders(Source, [PromoteAllScalars = true]),
+				  #"Changed column type" = Table.TransformColumnTypes(#"Promoted headers", {{"model", type text}, {"interaction_terms", type logical}, {"n_customers", Int64.Type}, {"n_repeat", Int64.Type}, {"base_rate", type number}, {"cv_pr_auc_base", type number}, {"cv_pr_auc_interactions", type number}, {"lr_test_p_value", type number}, {"roc_auc", type number}, {"pr_auc", type number}, {"top_10pct_capture_rate", type number}, {"top_20pct_capture_rate", type number}, {"git_commit", type text}, {"run_at", type datetime}}, "en-US")
+				in
+				  #"Changed column type"
+
+	annotation PBI_ResultType = Table
+

@@ -1,0 +1,44 @@
+table orders_by_month
+	lineageTag: 50e3613b-7ead-427d-97ea-207f69a8db47
+
+	measure 'Monthly Order Count' = SUM(orders_by_month[COUNT(*)])
+		formatString: 0
+		lineageTag: cf848aec-a9c6-4700-a9e1-74c4c3cd5b57
+
+	column month
+		dataType: dateTime
+		formatString: Long Date
+		lineageTag: 72b58913-2429-4e98-9c3e-05c01b80883f
+		summarizeBy: none
+		sourceColumn: month
+
+		variation Variation
+			isDefault
+			relationship: 8067a062-a3ae-43ca-98df-d2ae627e4f7f
+			defaultHierarchy: LocalDateTable_02143f03-db9f-4f4d-b69a-d9ce438addba.'Date Hierarchy'
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation UnderlyingDateTimeDataType = Date
+
+	column COUNT(*)
+		dataType: int64
+		formatString: 0
+		lineageTag: e7426ff0-a804-46fe-b123-9764e47c2432
+		summarizeBy: sum
+		sourceColumn: COUNT(*)
+
+		annotation SummarizationSetBy = Automatic
+
+	partition orders_by_month = m
+		mode: import
+		source =
+				let
+				  Source = Csv.Document(File.Contents("C:\Users\04ama\OneDrive\job-hunt\portfolio-projects\Ecommerce-growth-analytics\power_bi\exports\orders_by_month.csv"), [Delimiter = ",", Columns = 2, QuoteStyle = QuoteStyle.None]),
+				  #"Promoted headers" = Table.PromoteHeaders(Source, [PromoteAllScalars = true]),
+				  #"Changed column type" = Table.TransformColumnTypes(#"Promoted headers", {{"month", type date}, {"COUNT(*)", Int64.Type}}, "en-US")
+				in
+				  #"Changed column type"
+
+	annotation PBI_ResultType = Table
+

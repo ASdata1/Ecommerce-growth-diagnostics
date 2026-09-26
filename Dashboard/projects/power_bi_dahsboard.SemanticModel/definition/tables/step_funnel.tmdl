@@ -1,0 +1,73 @@
+table step_funnel
+	lineageTag: 0450f25f-ce4c-4427-ab9a-011f4ba3900b
+
+	measure 'Biggest Single-Step Drop' =
+			
+			VAR MinStep = MINX(step_funnel, step_funnel[pct_moved_to_next])
+			VAR MinRow = TOPN(1, step_funnel, step_funnel[pct_moved_to_next], 1)
+			VAR FromStage = MAXX(MinRow, step_funnel[from_stage])
+			VAR ToStage = MAXX(MinRow, step_funnel[to_stage])
+			RETURN
+			"<div style='font-family:Segoe UI,sans-serif;background:#fcfcfb;border:1px solid rgba(11,11,11,.10);border-radius:10px;padding:26px 28px;'>" &
+			"<div style='font-size:13px;text-transform:uppercase;letter-spacing:.07em;color:#898781;margin-bottom:10px;'>Biggest single-step drop</div>" &
+			"<div style='font-size:40px;font-weight:700;color:#e34948;margin-bottom:10px;'>" & FORMAT(MinStep,"0.00") & "%</div>" &
+			"<div style='font-size:16px;color:#52514e;line-height:1.6;'>" & FromStage & " → " & ToStage & " conversion — the lowest of the three steps.</div>" &
+			"</div>"
+		lineageTag: 131aa55e-6d72-42f1-8d6c-eabf2c10251f
+
+	column from_stage
+		dataType: string
+		lineageTag: 1a36e0a8-5c3f-423c-a061-fd8e2dce7898
+		summarizeBy: none
+		sourceColumn: from_stage
+
+		annotation SummarizationSetBy = Automatic
+
+	column to_stage
+		dataType: string
+		lineageTag: ffb8edc9-4b5c-469f-8a3d-3af885c8e83b
+		summarizeBy: none
+		sourceColumn: to_stage
+
+		annotation SummarizationSetBy = Automatic
+
+	column from_count
+		dataType: int64
+		formatString: 0
+		lineageTag: 9715971f-376a-4ab0-883d-cd5d1078b909
+		summarizeBy: sum
+		sourceColumn: from_count
+
+		annotation SummarizationSetBy = Automatic
+
+	column to_count
+		dataType: int64
+		formatString: 0
+		lineageTag: 84bff563-4112-4d0e-a75f-8cc96aebb194
+		summarizeBy: sum
+		sourceColumn: to_count
+
+		annotation SummarizationSetBy = Automatic
+
+	column pct_moved_to_next
+		dataType: double
+		lineageTag: 22b71b91-a29c-49f9-a0c7-d9ee3a505630
+		summarizeBy: sum
+		sourceColumn: pct_moved_to_next
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	partition step_funnel = m
+		mode: import
+		source =
+				let
+				  Source = Csv.Document(File.Contents("C:\Users\04ama\OneDrive\job-hunt\portfolio-projects\Ecommerce-growth-analytics\power_bi\exports\step_funnel.csv"), [Delimiter = ",", Columns = 5, QuoteStyle = QuoteStyle.None]),
+				  #"Promoted headers" = Table.PromoteHeaders(Source, [PromoteAllScalars = true]),
+				  #"Changed column type" = Table.TransformColumnTypes(#"Promoted headers", {{"from_stage", type text}, {"to_stage", type text}, {"from_count", Int64.Type}, {"to_count", Int64.Type}, {"pct_moved_to_next", type number}}, "en-US")
+				in
+				  #"Changed column type"
+
+	annotation PBI_ResultType = Table
+
