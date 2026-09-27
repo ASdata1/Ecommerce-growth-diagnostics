@@ -1,6 +1,41 @@
 table repeat_purchase_model_metrics
 	lineageTag: 6aed2595-2dfb-4003-9c36-f5b39761d20f
 
+	measure ROC-AUC = AVERAGE(repeat_purchase_model_metrics[roc_auc])
+		formatString: 0.000
+		displayFolder: Model
+		lineageTag: e17c24e5-7774-4386-b84f-bb360667bf2b
+
+	measure PR-AUC = AVERAGE(repeat_purchase_model_metrics[pr_auc])
+		formatString: 0.000
+		displayFolder: Model
+		lineageTag: e177238b-c182-44a4-9f74-0536acd87287
+
+	measure 'Base Rate' = AVERAGE(repeat_purchase_model_metrics[base_rate])
+		formatString: 0.0%
+		displayFolder: Model
+		lineageTag: 150a576a-f626-45f7-b520-dd972c60971f
+
+	measure 'Top-10% Capture Rate' = AVERAGE(repeat_purchase_model_metrics[top_10pct_capture_rate])
+		formatString: 0.0\%
+		displayFolder: Model
+		lineageTag: 10cf8546-9c5f-4fd5-9708-a746cff36988
+
+	measure 'Top-20% Capture Rate' = AVERAGE(repeat_purchase_model_metrics[top_20pct_capture_rate])
+		formatString: 0.0\%
+		displayFolder: Model
+		lineageTag: d3b05667-ca41-4fa6-869d-90a88a83e88d
+
+	measure 'Top-10% Lift' = DIVIDE([Top-10% Capture Rate], 10)
+		formatString: 0.0\×
+		displayFolder: Model
+		lineageTag: 3d7c4a42-85ee-467b-8162-5a01d84ddda6
+
+	measure 'Top-20% Lift' = DIVIDE([Top-20% Capture Rate], 20)
+		formatString: 0.0\×
+		displayFolder: Model
+		lineageTag: 5d430c39-7eb8-4248-947b-1eba20738207
+
 	column model
 		dataType: string
 		lineageTag: 8603acdc-a8c5-45ba-bb5a-f1b1202f9269
@@ -142,7 +177,7 @@ table repeat_purchase_model_metrics
 		mode: import
 		source =
 				let
-				  Source = Csv.Document(File.Contents("C:\Users\04ama\OneDrive\job-hunt\portfolio-projects\Ecommerce-growth-analytics\power_bi\exports\repeat_purchase_model_metrics.csv"), [Delimiter = ",", Columns = 14, QuoteStyle = QuoteStyle.None]),
+				  Source = Csv.Document(File.Contents("C:\Users\04ama\OneDrive\job-hunt\portfolio-projects\Ecommerce-growth-analytics\Dashboard\exports\repeat_purchase_model_metrics.csv"), [Delimiter = ",", Columns = 14, QuoteStyle = QuoteStyle.None]),
 				  #"Promoted headers" = Table.PromoteHeaders(Source, [PromoteAllScalars = true]),
 				  #"Changed column type" = Table.TransformColumnTypes(#"Promoted headers", {{"model", type text}, {"interaction_terms", type logical}, {"n_customers", Int64.Type}, {"n_repeat", Int64.Type}, {"base_rate", type number}, {"cv_pr_auc_base", type number}, {"cv_pr_auc_interactions", type number}, {"lr_test_p_value", type number}, {"roc_auc", type number}, {"pr_auc", type number}, {"top_10pct_capture_rate", type number}, {"top_20pct_capture_rate", type number}, {"git_commit", type text}, {"run_at", type datetime}}, "en-US")
 				in

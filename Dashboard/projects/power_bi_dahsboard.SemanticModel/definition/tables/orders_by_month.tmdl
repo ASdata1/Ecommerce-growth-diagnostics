@@ -1,9 +1,10 @@
 table orders_by_month
 	lineageTag: 50e3613b-7ead-427d-97ea-207f69a8db47
 
-	measure 'Monthly Order Count' = SUM(orders_by_month[COUNT(*)])
-		formatString: 0
-		lineageTag: cf848aec-a9c6-4700-a9e1-74c4c3cd5b57
+	measure 'Orders per Month' = SUM(orders_by_month[order_count])
+		formatString: #,##0
+		displayFolder: Overview
+		lineageTag: 62b52d57-4ca2-4567-8588-182b3d8ca5ae
 
 	column month
 		dataType: dateTime
@@ -21,7 +22,7 @@ table orders_by_month
 
 		annotation UnderlyingDateTimeDataType = Date
 
-	column COUNT(*)
+	column order_count
 		dataType: int64
 		formatString: 0
 		lineageTag: e7426ff0-a804-46fe-b123-9764e47c2432
@@ -34,7 +35,7 @@ table orders_by_month
 		mode: import
 		source =
 				let
-				  Source = Csv.Document(File.Contents("C:\Users\04ama\OneDrive\job-hunt\portfolio-projects\Ecommerce-growth-analytics\power_bi\exports\orders_by_month.csv"), [Delimiter = ",", Columns = 2, QuoteStyle = QuoteStyle.None]),
+				  Source = Csv.Document(File.Contents("C:\Users\04ama\OneDrive\job-hunt\portfolio-projects\Ecommerce-growth-analytics\Dashboard\exports\orders_by_month.csv"), [Delimiter = ",", Columns = 2, QuoteStyle = QuoteStyle.None]),
 				  #"Promoted headers" = Table.PromoteHeaders(Source, [PromoteAllScalars = true]),
 				  #"Changed column type" = Table.TransformColumnTypes(#"Promoted headers", {{"month", type date}, {"COUNT(*)", Int64.Type}}, "en-US")
 				in

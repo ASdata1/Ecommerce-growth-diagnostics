@@ -1,0 +1,36 @@
+table 'Top Bottom N'
+	lineageTag: 1297f67e-51dc-461f-897d-bec5541717ec
+
+	column 'N Order'
+		dataType: int64
+		isHidden
+		formatString: 0
+		lineageTag: 3c3e435e-b6a6-483f-8eac-899dfec25b89
+		summarizeBy: sum
+		sourceColumn: [Value3]
+
+	column 'N Label'
+		dataType: string
+		lineageTag: e9b133a3-711f-4a6f-a81a-2ebf9af9ed5b
+		summarizeBy: none
+		sourceColumn: [Value1]
+		sortByColumn: 'N Order'
+
+	column 'N Value'
+		dataType: int64
+		isHidden
+		formatString: 0
+		lineageTag: 85754772-e9f6-4d58-bf3f-ae04c3e037ef
+		summarizeBy: sum
+		sourceColumn: [Value2]
+		sortByColumn: 'N Order'
+
+	partition 'Top Bottom N' = calculated
+		mode: import
+		source =
+				{
+				    ("Top 5 & bottom 5", 5, 0),
+				    ("Top 10 & bottom 10", 10, 1),
+				    ("All features", 999, 2)
+				}
+

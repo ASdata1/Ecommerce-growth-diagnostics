@@ -1,29 +1,35 @@
 table repeat_purchase_hypothesis_tests
 	lineageTag: 0aa8d660-ee04-4e7f-8802-68b906470f95
 
-	measure 'Hypothesis Test Cards' =
+	measure 'Review Score Verdict' =
 			
-			VAR Cards =
-			    CONCATENATEX(
-			        repeat_purchase_hypothesis_tests,
-			        VAR PVal = repeat_purchase_hypothesis_tests[p_value]
-			        VAR Sig = repeat_purchase_hypothesis_tests[significant_05]
-			        VAR BadgeColor = IF(Sig, "#006300", "#898781")
-			        VAR BadgeLabel = IF(Sig, "significant", "not significant")
-			        RETURN
-			        "<div style='font-family:Segoe UI,sans-serif;background:#fcfcfb;border:1px solid rgba(11,11,11,.10);border-radius:10px;padding:22px 24px;flex:1;min-width:260px;'>" &
-			          "<div style='display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:14px;'>" &
-			            "<div style='font-size:17px;font-weight:600;color:#0b0b0b;line-height:1.4;'>" & repeat_purchase_hypothesis_tests[hypothesis] & "</div>" &
-			            "<div style='font-size:13px;padding:5px 11px;border-radius:100px;border:1px solid " & BadgeColor & ";color:" & BadgeColor & ";font-weight:600;white-space:nowrap;'>p = " & FORMAT(PVal,"0.000") & " · " & BadgeLabel & "</div>" &
-			          "</div>" &
-			          "<div style='font-size:15px;color:#52514e;line-height:1.65;'>" & repeat_purchase_hypothesis_tests[detail] & "</div>" &
-			        "</div>",
-			        "",
-			        repeat_purchase_hypothesis_tests[hypothesis], 1
-			    )
+			VAR MatchedRow = CALCULATETABLE(repeat_purchase_hypothesis_tests, repeat_purchase_hypothesis_tests[hypothesis] = "Review score differs: repeat vs one-time buyers")
+			VAR PVal = MAXX(MatchedRow, repeat_purchase_hypothesis_tests[p_value])
+			VAR Sig = MAXX(MatchedRow, IF(repeat_purchase_hypothesis_tests[significant_05], 1, 0)) = 1
 			RETURN
-			"<div style='display:flex;flex-wrap:wrap;gap:18px;'>" & Cards & "</div>"
-		lineageTag: 26ebc5fd-c9ce-4629-9176-5b4714f33ef7
+			"p = " & FORMAT(PVal, "0.000") & " · " & IF(Sig, "significant", "not significant")
+		displayFolder: Model
+		lineageTag: 17ed1502-c984-480f-a452-48eacf5e26aa
+
+	measure 'Payment Type Verdict' =
+			
+			VAR MatchedRow = CALCULATETABLE(repeat_purchase_hypothesis_tests, repeat_purchase_hypothesis_tests[hypothesis] = "Repeat-purchase rate differs by payment type")
+			VAR PVal = MAXX(MatchedRow, repeat_purchase_hypothesis_tests[p_value])
+			VAR Sig = MAXX(MatchedRow, IF(repeat_purchase_hypothesis_tests[significant_05], 1, 0)) = 1
+			RETURN
+			"p = " & FORMAT(PVal, "0.000") & " · " & IF(Sig, "significant", "not significant")
+		displayFolder: Model
+		lineageTag: 33d6c1e8-f73c-412a-9d09-abf9617de884
+
+	measure 'Interaction Terms Verdict' =
+			
+			VAR MatchedRow = CALCULATETABLE(repeat_purchase_hypothesis_tests, repeat_purchase_hypothesis_tests[hypothesis] = "Pairwise numeric interactions improve model fit")
+			VAR PVal = MAXX(MatchedRow, repeat_purchase_hypothesis_tests[p_value])
+			VAR Sig = MAXX(MatchedRow, IF(repeat_purchase_hypothesis_tests[significant_05], 1, 0)) = 1
+			RETURN
+			"p = " & FORMAT(PVal, "0.000") & " · " & IF(Sig, "significant", "not significant")
+		displayFolder: Model
+		lineageTag: 5002958f-935b-4519-ab87-abfbddb2beb7
 
 	column hypothesis
 		dataType: string
@@ -139,7 +145,7 @@ table repeat_purchase_hypothesis_tests
 		mode: import
 		source =
 				let
-				  Source = Csv.Document(File.Contents("C:\Users\04ama\OneDrive\job-hunt\portfolio-projects\Ecommerce-growth-analytics\power_bi\exports\repeat_purchase_hypothesis_tests.csv"), [Delimiter = ",", Columns = 12, QuoteStyle = QuoteStyle.None]),
+				  Source = Csv.Document(File.Contents("C:\Users\04ama\OneDrive\job-hunt\portfolio-projects\Ecommerce-growth-analytics\Dashboard\exports\repeat_purchase_hypothesis_tests.csv"), [Delimiter = ",", Columns = 12, QuoteStyle = QuoteStyle.None]),
 				  #"Promoted headers" = Table.PromoteHeaders(Source, [PromoteAllScalars = true]),
 				  #"Changed column type" = Table.TransformColumnTypes(#"Promoted headers", {{"hypothesis", type text}, {"test", type text}, {"statistic_name", type text}, {"statistic", type number}, {"p_value", type number}, {"dof", Int64.Type}, {"effect_size_name", type text}, {"effect_size", type number}, {"significant_05", type logical}, {"detail", type text}, {"run_at", type datetime}, {"git_commit", type text}}, "en-US")
 				in

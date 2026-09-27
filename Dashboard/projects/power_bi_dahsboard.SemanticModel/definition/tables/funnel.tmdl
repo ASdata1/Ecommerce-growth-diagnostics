@@ -1,44 +1,31 @@
 table funnel
 	lineageTag: d88c2eac-2fc9-4a77-a60d-b85f81cdf465
 
-	measure 'Delivery Rate Callout' =
-			
-			VAR DeliveredPct = CALCULATE(SELECTEDVALUE(funnel[pct_of_total]), funnel[stage] = "Delivered")
-			VAR FormattedPct = FORMAT(DeliveredPct, "0") & "%"
-			RETURN
-			"<div style='font-family:Segoe UI,sans-serif;background:#fcfcfb;border:1px solid rgba(11,11,11,.10);border-radius:10px;padding:18px 20px;font-size:14px;color:#52514e;line-height:1.6;'><strong style='color:#0b0b0b;'>" & FormattedPct & " of orders reach delivered.</strong> Repeat purchase — not the fulfillment funnel — is the real growth constraint.</div>"
-		lineageTag: 350f8f1f-ee6a-47bc-86c9-9a1fe564a0f1
+	measure 'Orders Reached' = SUM(funnel[orders_reached])
+		formatString: #,##0
+		displayFolder: Funnel
+		lineageTag: ad560962-9bc9-47bf-9724-13a46993d6ca
 
-	measure 'Funnel Stages' =
+	measure 'Pct of Total' = SUM(funnel[pct_of_total])
+		formatString: 0.00\%
+		displayFolder: Funnel
+		lineageTag: 7560b3e5-e02b-4234-9960-3b654efeb9ed
+
+	measure 'Funnel Stage Color' =
 			
-			VAR PurchasedCount = CALCULATE(SELECTEDVALUE(funnel[orders_reached]), funnel[stage]="Purchased")
-			VAR PurchasedPct = CALCULATE(SELECTEDVALUE(funnel[pct_of_total]), funnel[stage]="Purchased")
-			VAR ApprovedCount = CALCULATE(SELECTEDVALUE(funnel[orders_reached]), funnel[stage]="Approved")
-			VAR ApprovedPct = CALCULATE(SELECTEDVALUE(funnel[pct_of_total]), funnel[stage]="Approved")
-			VAR ShippedCount = CALCULATE(SELECTEDVALUE(funnel[orders_reached]), funnel[stage]="Shipped")
-			VAR ShippedPct = CALCULATE(SELECTEDVALUE(funnel[pct_of_total]), funnel[stage]="Shipped")
-			VAR DeliveredCount = CALCULATE(SELECTEDVALUE(funnel[orders_reached]), funnel[stage]="Delivered")
-			VAR DeliveredPct = CALCULATE(SELECTEDVALUE(funnel[pct_of_total]), funnel[stage]="Delivered")
-			VAR Step1 = CALCULATE(SELECTEDVALUE(step_funnel[pct_moved_to_next]), step_funnel[from_stage]="Purchased", step_funnel[to_stage]="Approved")
-			VAR Step2 = CALCULATE(SELECTEDVALUE(step_funnel[pct_moved_to_next]), step_funnel[from_stage]="Approved", step_funnel[to_stage]="Shipped")
-			VAR Step3 = CALCULATE(SELECTEDVALUE(step_funnel[pct_moved_to_next]), step_funnel[from_stage]="Shipped", step_funnel[to_stage]="Delivered")
-			VAR MaxWidth = 520
-			VAR MaxCount = PurchasedCount
-			VAR W1 = FORMAT(MaxWidth, "0")
-			VAR W2 = FORMAT(ROUND(DIVIDE(ApprovedCount, MaxCount) * MaxWidth, 0), "0")
-			VAR W3 = FORMAT(ROUND(DIVIDE(ShippedCount, MaxCount) * MaxWidth, 0), "0")
-			VAR W4 = FORMAT(ROUND(DIVIDE(DeliveredCount, MaxCount) * MaxWidth, 0), "0")
-			VAR RowCSS = "display:flex;align-items:center;margin-bottom:26px;"
-			VAR LabelCSS = "font-size:20px;font-weight:600;color:#0b0b0b;margin-left:20px;"
-			VAR SubCSS = "font-size:15px;color:#898781;margin-top:4px;margin-left:20px;"
-			VAR StepCSS = "font-size:14px;color:#898781;margin-bottom:8px;"
-			VAR Row1 = "<div style='" & RowCSS & "'><div style='width:" & W1 & "px;height:64px;border-radius:8px;background:#86b6ef;'></div><div><div style='" & LabelCSS & "'>Purchased</div><div style='" & SubCSS & "'>" & FORMAT(PurchasedCount,"#,##0") & " orders · " & FORMAT(PurchasedPct,"0.00") & "% of total</div></div></div>"
-			VAR Row2 = "<div style='" & StepCSS & "'>" & FORMAT(Step1,"0.00") & "% conversion from purchased</div><div style='" & RowCSS & "'><div style='width:" & W2 & "px;height:64px;border-radius:8px;background:#5598e7;'></div><div><div style='" & LabelCSS & "'>Approved</div><div style='" & SubCSS & "'>" & FORMAT(ApprovedCount,"#,##0") & " orders · " & FORMAT(ApprovedPct,"0.00") & "% of total</div></div></div>"
-			VAR Row3 = "<div style='" & StepCSS & "'>" & FORMAT(Step2,"0.00") & "% conversion from approved</div><div style='" & RowCSS & "'><div style='width:" & W3 & "px;height:64px;border-radius:8px;background:#2a78d6;'></div><div><div style='" & LabelCSS & "'>Shipped</div><div style='" & SubCSS & "'>" & FORMAT(ShippedCount,"#,##0") & " orders · " & FORMAT(ShippedPct,"0.00") & "% of total</div></div></div>"
-			VAR Row4 = "<div style='" & StepCSS & "'>" & FORMAT(Step3,"0.00") & "% conversion from shipped</div><div style='" & RowCSS & "'><div style='width:" & W4 & "px;height:64px;border-radius:8px;background:#1c5cab;'></div><div><div style='" & LabelCSS & "'>Delivered</div><div style='" & SubCSS & "'>" & FORMAT(DeliveredCount,"#,##0") & " orders · " & FORMAT(DeliveredPct,"0.00") & "% of total</div></div></div>"
+			VAR StageLower = LOWER(SELECTEDVALUE(funnel[stage]))
 			RETURN
-			"<div style='font-family:Segoe UI,sans-serif;'>" & Row1 & Row2 & Row3 & Row4 & "</div>"
-		lineageTag: 867bc4dc-a7c9-4d5b-a02d-38f63c13244a
+			SWITCH(
+			    TRUE(),
+			    StageLower = "purchased", "#86B6EF",
+			    StageLower = "approved", "#5598E7",
+			    StageLower = "shipped", "#2A78D6",
+			    StageLower = "delivered", "#1C5CAB",
+			    "#86B6EF"
+			)
+		isHidden
+		displayFolder: Funnel
+		lineageTag: eb7b5a29-9b6e-4399-834c-d99e56623d06
 
 	column stage
 		dataType: string
@@ -67,11 +54,25 @@ table funnel
 
 		annotation PBI_FormatHint = {"isGeneralNumber":true}
 
+	column 'Stage Label' =
+			SWITCH(
+			    TRUE(),
+			    LOWER(funnel[stage]) = "purchased", "Purchased",
+			    LOWER(funnel[stage]) = "approved", "Approved",
+			    LOWER(funnel[stage]) = "shipped", "Shipped",
+			    LOWER(funnel[stage]) = "delivered", "Delivered",
+			    funnel[stage]
+			)
+		dataType: string
+		displayFolder: Funnel
+		lineageTag: 6a0f9265-3f52-42e6-bcb6-ab15bbdbbced
+		summarizeBy: none
+
 	partition funnel = m
 		mode: import
 		source =
 				let
-				  Source = Csv.Document(File.Contents("C:\Users\04ama\OneDrive\job-hunt\portfolio-projects\Ecommerce-growth-analytics\power_bi\exports\funnel.csv"), [Delimiter = ",", Columns = 3, QuoteStyle = QuoteStyle.None]),
+				  Source = Csv.Document(File.Contents("C:\Users\04ama\OneDrive\job-hunt\portfolio-projects\Ecommerce-growth-analytics\Dashboard\exports\funnel.csv"), [Delimiter = ",", Columns = 3, QuoteStyle = QuoteStyle.None]),
 				  #"Promoted headers" = Table.PromoteHeaders(Source, [PromoteAllScalars = true]),
 				  #"Changed column type" = Table.TransformColumnTypes(#"Promoted headers", {{"stage", type text}, {"orders_reached", Int64.Type}, {"pct_of_total", type number}}, "en-US")
 				in

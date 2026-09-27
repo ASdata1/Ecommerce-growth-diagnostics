@@ -1,45 +1,25 @@
 table kpi_overview
 	lineageTag: 67fbefc6-ebde-47ab-8d14-27709b3f8f07
 
-	measure 'KPI Overview Row' =
-			
-			VAR TotalOrders = SELECTEDVALUE(kpi_overview[total_orders])
-			VAR TotalCustomers = SELECTEDVALUE(kpi_overview[total_unique_customers])
-			VAR AOV = SELECTEDVALUE(kpi_overview[avg_order_value])
-			VAR RepeatRate = SELECTEDVALUE(kpi_overview[repeat_purchase_rate_pct])
-			VAR TileCSS = "background:#fcfcfb;border:1px solid rgba(11,11,11,.10);border-radius:10px;padding:16px 18px;box-shadow:0 1px 2px rgba(11,11,11,.06),0 6px 20px rgba(11,11,11,.07);font-family:'Segoe UI',system-ui,sans-serif;"
-			VAR LabelCSS = "font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:#52514e;"
-			VAR ValueCSS = "font-size:26px;font-weight:600;letter-spacing:-.01em;color:#0b0b0b;margin-top:6px;"
-			VAR CaptionCSS = "font-size:12px;color:#898781;margin-top:4px;"
-			VAR Tile1 = "<div style='" & TileCSS & "'><div style='" & LabelCSS & "'>Total Orders</div><div style='" & ValueCSS & "'>" & FORMAT(TotalOrders,"#,##0") & "</div></div>"
-			VAR Tile2 = "<div style='" & TileCSS & "'><div style='" & LabelCSS & "'>Unique Customers</div><div style='" & ValueCSS & "'>" & FORMAT(TotalCustomers,"#,##0") & "</div></div>"
-			VAR Tile3 = "<div style='" & TileCSS & "'><div style='" & LabelCSS & "'>Avg. Order Value</div><div style='" & ValueCSS & "'>R$" & FORMAT(AOV,"#,##0.00") & "</div></div>"
-			VAR Tile4 = "<div style='" & TileCSS & "'><div style='" & LabelCSS & "'>Repeat Purchase Rate</div><div style='" & ValueCSS & "'>" & FORMAT(RepeatRate,"0.0") & "%</div><div style='" & CaptionCSS & "'>of customers order again</div></div>"
-			RETURN
-			"<div style='display:flex;gap:14px;'>" & Tile1 & Tile2 & Tile3 & Tile4 & "</div>"
-		lineageTag: 30817776-a22c-48b7-ae5e-eac1bb5e5236
+	measure 'Total Orders' = SUM(kpi_overview[total_orders])
+		formatString: #,##0
+		displayFolder: Overview
+		lineageTag: b15cf90e-1adc-4b81-bf3c-2e5bc8cbf3f1
 
-	measure 'KPI Row - Model Metrics' =
-			
-			VAR RocAuc = CALCULATE(SELECTEDVALUE(repeat_purchase_model_metrics[roc_auc]), repeat_purchase_model_metrics[interaction_terms] = FALSE)
-			VAR PrAuc = CALCULATE(SELECTEDVALUE(repeat_purchase_model_metrics[pr_auc]), repeat_purchase_model_metrics[interaction_terms] = FALSE)
-			VAR BaseRate = CALCULATE(SELECTEDVALUE(repeat_purchase_model_metrics[base_rate]), repeat_purchase_model_metrics[interaction_terms] = FALSE)
-			VAR Top10 = CALCULATE(SELECTEDVALUE(repeat_purchase_model_metrics[top_10pct_capture_rate]), repeat_purchase_model_metrics[interaction_terms] = FALSE)
-			VAR Top20 = CALCULATE(SELECTEDVALUE(repeat_purchase_model_metrics[top_20pct_capture_rate]), repeat_purchase_model_metrics[interaction_terms] = FALSE)
-			VAR Top10Lift = DIVIDE(Top10, 0.1)
-			VAR Top20Lift = DIVIDE(Top20, 0.2)
-			VAR TileCSS = "background:#fcfcfb;border:1px solid rgba(11,11,11,.10);border-radius:10px;padding:20px 22px;box-shadow:0 1px 2px rgba(11,11,11,.06),0 6px 20px rgba(11,11,11,.07);font-family:'Segoe UI',system-ui,sans-serif;"
-			VAR LabelCSS = "font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:#52514e;"
-			VAR ValueCSS = "font-size:30px;font-weight:600;letter-spacing:-.01em;color:#0b0b0b;margin-top:6px;"
-			VAR CaptionCSS = "font-size:13px;color:#898781;margin-top:4px;"
-			VAR GoodCaptionCSS = "font-size:13px;color:#006300;font-weight:600;margin-top:4px;"
-			VAR Tile1 = "<div style='" & TileCSS & "'><div style='" & LabelCSS & "'>ROC-AUC</div><div style='" & ValueCSS & "'>" & FORMAT(RocAuc,"0.000") & "</div><div style='" & CaptionCSS & "'>vs 0.500 random</div></div>"
-			VAR Tile2 = "<div style='" & TileCSS & "'><div style='" & LabelCSS & "'>PR-AUC</div><div style='" & ValueCSS & "'>" & FORMAT(PrAuc,"0.000") & "</div><div style='" & CaptionCSS & "'>vs " & FORMAT(BaseRate,"0.0%") & " base rate</div></div>"
-			VAR Tile3 = "<div style='" & TileCSS & "'><div style='" & LabelCSS & "'>Top-10% Capture Rate</div><div style='" & ValueCSS & "'>" & FORMAT(Top10,"0.0%") & "</div><div style='" & GoodCaptionCSS & "'>" & FORMAT(Top10Lift,"0.0") & "× lift over random</div></div>"
-			VAR Tile4 = "<div style='" & TileCSS & "'><div style='" & LabelCSS & "'>Top-20% Capture Rate</div><div style='" & ValueCSS & "'>" & FORMAT(Top20,"0.0%") & "</div><div style='" & GoodCaptionCSS & "'>" & FORMAT(Top20Lift,"0.0") & "× lift over random</div></div>"
-			RETURN
-			"<div style='display:flex;gap:16px;'>" & Tile1 & Tile2 & Tile3 & Tile4 & "</div>"
-		lineageTag: b955737c-8dcd-4e19-bfdb-0056eaaa2ce4
+	measure 'Unique Customers' = SUM(kpi_overview[total_unique_customers])
+		formatString: #,##0
+		displayFolder: Overview
+		lineageTag: b779fc75-4652-4a96-9d51-c7fb4efe4a0c
+
+	measure 'Avg Order Value' = SUM(kpi_overview[avg_order_value])
+		formatString: R$#,##0.00
+		displayFolder: Overview
+		lineageTag: 45c28c95-98a8-4e36-902c-882ebdb290f4
+
+	measure 'Repeat Purchase Rate' = SUM(kpi_overview[repeat_purchase_rate_pct])
+		formatString: 0.0\%
+		displayFolder: Overview
+		lineageTag: b7764e98-18c6-4066-b32f-69802f225016
 
 	column total_orders
 		dataType: int64
@@ -83,7 +63,7 @@ table kpi_overview
 		mode: import
 		source =
 				let
-				  Source = Csv.Document(File.Contents("C:\Users\04ama\OneDrive\job-hunt\portfolio-projects\Ecommerce-growth-analytics\power_bi\exports\kpi_overview.csv"), [Delimiter = ",", Columns = 4, QuoteStyle = QuoteStyle.None]),
+				  Source = Csv.Document(File.Contents("C:\Users\04ama\OneDrive\job-hunt\portfolio-projects\Ecommerce-growth-analytics\Dashboard\exports\kpi_overview.csv"), [Delimiter = ",", Columns = 4, QuoteStyle = QuoteStyle.None]),
 				  #"Promoted headers" = Table.PromoteHeaders(Source, [PromoteAllScalars = true]),
 				  #"Changed column type" = Table.TransformColumnTypes(#"Promoted headers", {{"total_orders", Int64.Type}, {"total_unique_customers", Int64.Type}, {"avg_order_value", type number}, {"repeat_purchase_rate_pct", type number}}, "en-US")
 				in

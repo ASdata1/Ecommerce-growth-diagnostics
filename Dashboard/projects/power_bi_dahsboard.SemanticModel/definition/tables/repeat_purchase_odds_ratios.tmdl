@@ -1,23 +1,29 @@
 table repeat_purchase_odds_ratios
 	lineageTag: e65f7535-9cb9-431e-b42f-2b5c90e69cf4
 
-	measure 'Top Repeat Driver Callout' =
+	measure 'Odds Ratio Color' = IF(SELECTEDVALUE(repeat_purchase_odds_ratios[odds_ratio]) >= 1, "#2A78D6", "#E34948")
+		displayFolder: Model
+		lineageTag: 2782fd8e-48b1-49c3-9b94-55b4b00ee94a
+
+	measure 'Odds Ratio Show Row' =
 			
-			VAR TopPositive = TOPN(1, repeat_purchase_odds_ratios, repeat_purchase_odds_ratios[odds_ratio], 0)
-			VAR TopPositiveLabel = MAXX(TopPositive, repeat_purchase_odds_ratios[feature])
-			VAR TopPositiveOR = MAXX(TopPositive, repeat_purchase_odds_ratios[odds_ratio])
-			VAR TopNegative = TOPN(1, repeat_purchase_odds_ratios, repeat_purchase_odds_ratios[odds_ratio], 1)
-			VAR TopNegativeLabel = MAXX(TopNegative, repeat_purchase_odds_ratios[feature])
-			VAR TopNegativeOR = MAXX(TopNegative, repeat_purchase_odds_ratios[odds_ratio])
+			VAR SelectedN = SELECTEDVALUE('Top Bottom N'[N Value], 5)
+			VAR CurrentOR = SELECTEDVALUE(repeat_purchase_odds_ratios[odds_ratio])
+			VAR HigherRank =
+			    RANKX(FILTER(ALLSELECTED(repeat_purchase_odds_ratios), repeat_purchase_odds_ratios[odds_ratio] >= 1), repeat_purchase_odds_ratios[odds_ratio], CurrentOR, DESC, DENSE)
+			VAR LowerRank =
+			    RANKX(FILTER(ALLSELECTED(repeat_purchase_odds_ratios), repeat_purchase_odds_ratios[odds_ratio] < 1), repeat_purchase_odds_ratios[odds_ratio], CurrentOR, ASC, DENSE)
 			RETURN
-			"<div style='font-family:Segoe UI,sans-serif;background:#fcfcfb;border:1px solid rgba(11,11,11,.10);border-radius:10px;padding:18px 20px;'>" &
-			  "<div style='font-size:11px;text-transform:uppercase;letter-spacing:.07em;color:#898781;margin-bottom:10px;'>What predicts repeat purchase</div>" &
-			  "<div style='display:flex;gap:16px;'>" &
-			    "<div><div style='font-size:20px;font-weight:600;color:#2a78d6;'>" & FORMAT(TopPositiveOR,"0.00") & "×</div><div style='font-size:12px;color:#52514e;margin-top:2px;'>" & TopPositiveLabel & "</div></div>" &
-			    "<div><div style='font-size:20px;font-weight:600;color:#e34948;'>" & FORMAT(TopNegativeOR,"0.00") & "×</div><div style='font-size:12px;color:#52514e;margin-top:2px;'>" & TopNegativeLabel & "</div></div>" &
-			  "</div>" &
-			"</div>"
-		lineageTag: 5ff62619-05e3-42c5-a31d-329864e52424
+			IF(
+			    SelectedN >= 999 ||
+			    (CurrentOR >= 1 && HigherRank <= SelectedN) ||
+			    (CurrentOR < 1 && LowerRank <= SelectedN),
+			    1
+			)
+		formatString: 0
+		isHidden
+		displayFolder: Model
+		lineageTag: e5f60be3-c578-4e7a-a958-7a382934c4bc
 
 	column feature
 		dataType: string
@@ -95,11 +101,52 @@ table repeat_purchase_odds_ratios
 
 		annotation SummarizationSetBy = Automatic
 
+	column 'Feature Type' =
+			SWITCH(
+			    TRUE(),
+			    LEFT(repeat_purchase_odds_ratios[feature], 15) = "customer_state_", "Customer state",
+			    LEFT(repeat_purchase_odds_ratios[feature], 17) = "product_category_", "Product category",
+			    LEFT(repeat_purchase_odds_ratios[feature], 13) = "payment_type_", "Payment type",
+			    "Other"
+			)
+		dataType: string
+		displayFolder: Model
+		lineageTag: 336b5cfb-80e4-496d-86fb-328e3b860069
+		summarizeBy: none
+
+	column 'Feature Label' =
+			VAR RawFeature = repeat_purchase_odds_ratios[feature]
+			VAR NoPrefix =
+			    SWITCH(
+			        TRUE(),
+			        LEFT(RawFeature, 15) = "customer_state_", MID(RawFeature, 16, 100),
+			        LEFT(RawFeature, 17) = "product_category_", MID(RawFeature, 18, 100),
+			        LEFT(RawFeature, 13) = "payment_type_", MID(RawFeature, 14, 100),
+			        RawFeature
+			    )
+			VAR Spaced = TRIM(SUBSTITUTE(NoPrefix, "_", " "))
+			VAR PathText = SUBSTITUTE(Spaced, " ", "|")
+			VAR WordCount = PATHLENGTH(PathText)
+			VAR W1 = PATHITEM(PathText, 1)
+			VAR W2 = IF(WordCount >= 2, PATHITEM(PathText, 2), "")
+			VAR W3 = IF(WordCount >= 3, PATHITEM(PathText, 3), "")
+			VAR W4 = IF(WordCount >= 4, PATHITEM(PathText, 4), "")
+			VAR Cap1 = UPPER(LEFT(W1, 1)) & LOWER(MID(W1, 2, 100))
+			VAR Cap2 = IF(W2 = "", "", UPPER(LEFT(W2, 1)) & LOWER(MID(W2, 2, 100)))
+			VAR Cap3 = IF(W3 = "", "", UPPER(LEFT(W3, 1)) & LOWER(MID(W3, 2, 100)))
+			VAR Cap4 = IF(W4 = "", "", UPPER(LEFT(W4, 1)) & LOWER(MID(W4, 2, 100)))
+			RETURN
+			TRIM(Cap1 & " " & Cap2 & " " & Cap3 & " " & Cap4)
+		dataType: string
+		displayFolder: Model
+		lineageTag: 63a6102a-d972-4de6-9f47-8ce5adaeccb4
+		summarizeBy: none
+
 	partition repeat_purchase_odds_ratios = m
 		mode: import
 		source =
 				let
-				  Source = Csv.Document(File.Contents("C:\Users\04ama\OneDrive\job-hunt\portfolio-projects\Ecommerce-growth-analytics\power_bi\exports\repeat_purchase_odds_ratios.csv"), [Delimiter = ",", Columns = 8, QuoteStyle = QuoteStyle.None]),
+				  Source = Csv.Document(File.Contents("C:\Users\04ama\OneDrive\job-hunt\portfolio-projects\Ecommerce-growth-analytics\Dashboard\exports\repeat_purchase_odds_ratios.csv"), [Delimiter = ",", Columns = 8, QuoteStyle = QuoteStyle.None]),
 				  #"Promoted headers" = Table.PromoteHeaders(Source, [PromoteAllScalars = true]),
 				  #"Changed column type" = Table.TransformColumnTypes(#"Promoted headers", {{"feature", type text}, {"coefficient", type number}, {"odds_ratio", type number}, {"abs_coefficient", type number}, {"direction", type text}, {"model", type text}, {"run_at", type datetime}, {"git_commit", type text}}, "en-US")
 				in

@@ -109,14 +109,26 @@ are used:
    closed-form standard error either way, so it resamples the test set with replacement 1,000
    times, recomputes every metric per resample, and reports the percentile interval — the standard
    bootstrap approach for a statistic with no analytic formula.
-6. **Power BI dashboard** — built from the CSV exports in `Dashboard/exports/`: the funnel, the
-   cohort-retention heatmap, the regional value/volume cut, and a repeat-purchase drivers page
-   from the odds-ratio and hypothesis-test tables above. Not yet assembled — see *Where this is
-   going*.
-   **Temporary fix:** until the Power BI report is built, the same numbers are viewable as a
-   self-contained HTML dashboard — [Olist Growth Dashboard](https://claude.ai/artifact/ULMkaLkcgrCmd6pFdqADDu)
-   (growth overview, funnel + cohort retention, repeat-purchase drivers) — built with Claude
-   directly from the `Dashboard/exports/*.csv` files, so the figures match what's in the database.
+6. **Power BI dashboard** —
+   [`Dashboard/projects/power_bi_dahsboard.pbip`](Dashboard/projects/power_bi_dahsboard.pbip),
+   built from the CSV exports in `Dashboard/exports/`. Three pages:
+
+   **Growth overview** — total orders, unique customers, AOV, repeat-purchase rate, and the
+   orders-per-month trend.
+   ![Growth overview page](Dashboard/screenshots/growth_overview.png)
+
+   **Funnel** — stage-by-stage order conversion (purchased → delivered) and the month-1
+   cohort-retention breakdown.
+   ![Funnel page](Dashboard/screenshots/funnel.png)
+
+   **Repeat-purchase drivers** — the model's odds ratios and the two hypothesis tests (review
+   score, payment type) from the tables above.
+   ![Repeat-purchase drivers page](Dashboard/screenshots/repeat_purchase_drivers.png)
+
+   Opening the `.pbip` directly needs Power BI Desktop; for a no-install alternative, the same
+   three pages are also viewable as a self-contained HTML dashboard —
+   [Olist Growth Dashboard](https://claude.ai/artifact/ULMkaLkcgrCmd6pFdqADDu) — built directly
+   from the same `Dashboard/exports/*.csv` files.
 7. [`tests/`](tests) — data-quality checks on the ETL output (`test_etl.py`) and sanity checks
    on the model feature query (`test_repeat_purchase_features.py`), including the right-censoring
    cutoff and an independent recompute of the `review_score` 30-day timing gate.
@@ -170,12 +182,6 @@ are used:
 
 The analysis so far is diagnostic, not causal, and nothing is wired into a live workflow yet.
 Planned next steps:
-
-- **Build the Power BI dashboard.** `src/repeat_purchase_analysis.py` and `notebooks/analysis.ipynb`
-  write their outputs to `Dashboard/exports/*.csv`. Next step is to import those CSVs into
-  Power BI and build the report pages (growth overview, funnel, cohort retention, repeat-purchase
-  drivers). Until then, the [HTML dashboard](https://claude.ai/artifact/ULMkaLkcgrCmd6pFdqADDu)
-  linked above stands in as a temporary fix, covering the same pages from the same CSV exports.
 
 - **Show the confidence intervals on the dashboard.** They're now in the
   `repeat_purchase_confidence_intervals` table / `Dashboard/exports/*.csv`; the dashboard's

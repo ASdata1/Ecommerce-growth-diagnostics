@@ -1,19 +1,41 @@
 table step_funnel
 	lineageTag: 0450f25f-ce4c-4427-ab9a-011f4ba3900b
 
-	measure 'Biggest Single-Step Drop' =
+	measure 'Step Conversion' = SUM(step_funnel[pct_moved_to_next])
+		formatString: 0.00\%
+		displayFolder: Funnel
+		lineageTag: b1037c0b-6df5-4fb7-9539-312cf5164313
+
+	measure 'Biggest Step Drop' =
 			
-			VAR MinStep = MINX(step_funnel, step_funnel[pct_moved_to_next])
-			VAR MinRow = TOPN(1, step_funnel, step_funnel[pct_moved_to_next], 1)
-			VAR FromStage = MAXX(MinRow, step_funnel[from_stage])
-			VAR ToStage = MAXX(MinRow, step_funnel[to_stage])
+			VAR MinRow = TOPN(1, ALL(step_funnel), step_funnel[pct_moved_to_next], 1)
+			VAR FromRaw = MAXX(MinRow, step_funnel[from_stage])
+			VAR ToRaw = MAXX(MinRow, step_funnel[to_stage])
+			VAR FromLabel =
+			    SWITCH(
+			        TRUE(),
+			        LOWER(FromRaw) = "created", "Purchased",
+			        LOWER(FromRaw) = "approved", "Approved",
+			        LOWER(FromRaw) = "shipped", "Shipped",
+			        FromRaw
+			    )
+			VAR ToLabel =
+			    SWITCH(
+			        TRUE(),
+			        LOWER(ToRaw) = "approved", "Approved",
+			        LOWER(ToRaw) = "shipped", "Shipped",
+			        LOWER(ToRaw) = "delivered", "Delivered",
+			        ToRaw
+			    )
 			RETURN
-			"<div style='font-family:Segoe UI,sans-serif;background:#fcfcfb;border:1px solid rgba(11,11,11,.10);border-radius:10px;padding:26px 28px;'>" &
-			"<div style='font-size:13px;text-transform:uppercase;letter-spacing:.07em;color:#898781;margin-bottom:10px;'>Biggest single-step drop</div>" &
-			"<div style='font-size:40px;font-weight:700;color:#e34948;margin-bottom:10px;'>" & FORMAT(MinStep,"0.00") & "%</div>" &
-			"<div style='font-size:16px;color:#52514e;line-height:1.6;'>" & FromStage & " → " & ToStage & " conversion — the lowest of the three steps.</div>" &
-			"</div>"
-		lineageTag: 131aa55e-6d72-42f1-8d6c-eabf2c10251f
+			FromLabel & " → " & ToLabel
+		displayFolder: Funnel
+		lineageTag: 6efbccb8-b3b0-4014-ae34-38169aa2bd26
+
+	measure 'Biggest Step Drop Pct' = MINX(ALL(step_funnel), step_funnel[pct_moved_to_next])
+		formatString: 0.00\%
+		displayFolder: Funnel
+		lineageTag: bd9b28cd-e611-4ea2-b34f-8d6cadf587bc
 
 	column from_stage
 		dataType: string
@@ -63,7 +85,7 @@ table step_funnel
 		mode: import
 		source =
 				let
-				  Source = Csv.Document(File.Contents("C:\Users\04ama\OneDrive\job-hunt\portfolio-projects\Ecommerce-growth-analytics\power_bi\exports\step_funnel.csv"), [Delimiter = ",", Columns = 5, QuoteStyle = QuoteStyle.None]),
+				  Source = Csv.Document(File.Contents("C:\Users\04ama\OneDrive\job-hunt\portfolio-projects\Ecommerce-growth-analytics\Dashboard\exports\step_funnel.csv"), [Delimiter = ",", Columns = 5, QuoteStyle = QuoteStyle.None]),
 				  #"Promoted headers" = Table.PromoteHeaders(Source, [PromoteAllScalars = true]),
 				  #"Changed column type" = Table.TransformColumnTypes(#"Promoted headers", {{"from_stage", type text}, {"to_stage", type text}, {"from_count", Int64.Type}, {"to_count", Int64.Type}, {"pct_moved_to_next", type number}}, "en-US")
 				in
