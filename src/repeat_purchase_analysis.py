@@ -1,47 +1,8 @@
 """
-Repeat-purchase propensity: hypothesis testing + logistic regression.
+Repeat-purchase propensity: hypothesis tests + logistic regression predicting
+whether a first-time customer places a second order.
 
-Question this answers: using only what's known from a customer's FIRST
-order, is there a statistically significant relationship between their
-first-order experience (review score, delivery delay, payment behaviour)
-and whether they ever place a second order - and can we score new
-first-time customers on that propensity?
-
-Why logistic regression specifically: the target (repeat_purchase) is
-binary, and the point of this script is not just "predict yes/no" but
-"which factors matter, and by how much" - logistic regression's
-coefficients convert directly into odds ratios, which is the readable,
-defensible output a business stakeholder can act on
-
-Class imbalance, stated up front: repeat purchase is rare in this
-dataset (see the EDA notebook / cohort_retention.sql finding). That means:
-  - accuracy is a useless headline metric - PR-AUC and recall are used instead
-  - class_weight="balanced" is used so the rare positive class isn't
-    ignored during training
-
-Validation strategy: a single 80/20 train/test split, with 5-fold
-STRATIFIED cross-validation *inside* the training set for the one model
-comparison this script makes (plain features vs. + pairwise interaction
-terms). The test set is touched exactly once, at the end, for the final
-number - not used to pick between the two model versions. Stratified
-because with a rare positive class, an unstratified split can easily
-land a fold with very few positives by chance.
-
-Model comparison, scoped deliberately: this script makes ONE comparison -
-does adding pairwise interaction terms between the numeric features
-improve the model beyond what's explained by noise? - not a search over
-many feature sets or hyperparameters. Two things decide it:
-  1. Cross-validated PR-AUC (predictive: is it actually better on unseen folds?)
-  2. A likelihood-ratio test via statsmodels (inferential: is the improvement
-     in fit statistically significant, not just numerically higher?)
-The simpler, fully interpretable model is kept as the default unless both
-of those say otherwise - odds ratios on interaction terms are much harder
-to explain to a stakeholder, so the bar to include them is deliberately high.
-
-Run: python src/repeat_purchase_analysis.py
-(after src/etl.py has been run, so data/olist.db exists and includes the
-order_reviews and products tables, and after the EDA notebook has been
-reviewed).
+Run: python src/repeat_purchase_analysis.py (after src/etl.py)
 """
 
 from datetime import datetime, timezone
@@ -107,10 +68,7 @@ def _hypothesis_row(
     effect_size_name: str | None = None,
     effect_size: float | None = None,
 ) -> dict:
-    """One row of the hypothesis-test table's shared schema, used by both
-    run_hypothesis_tests() (H1, H2) and likelihood_ratio_test() - keeps three
-    call sites from each redefining the same 10 keys, where a typo'd key name
-    would silently drop a column instead of raising."""
+    """One row of the hypothesis-test table's shared schema."""
     return {
         "hypothesis": hypothesis,
         "test": test,
@@ -128,26 +86,19 @@ def _hypothesis_row(
 def load_features(engine=None) -> pd.DataFrame:
     engine = engine or get_engine()
     df = pd.read_sql(QUERY_PATH.read_text(), engine)
-    # the query only joins and exposes raw lat/lng + seller_state (see
-    # first_order_geo in that .sql file) - add_geo_features() derives the actual
-    # model features (distance, same-state) from them here, once, in pandas
+    # SQLite has no trig functions, so distance/same-state are added here in pandas
     return add_geo_features(df)
 
 
 def run_hypothesis_tests(df: pd.DataFrame) -> list[dict]:
-    """Runs the two first-order hypothesis tests, prints them as before, and
-    returns one row per test for write_dashboard_tables() to persist."""
+    """Runs the two hypothesis tests, returns rows for the dashboard."""
     print("\n=== Hypothesis tests ===")
     rows: list[dict] = []
 
-    # H1: mean review score differs between repeat and one-time customers (among
-    # customers who left one the model can use - review_score is the gated column,
-    # so this compares one-timers against repeaters' known review scores)
+    # H1: review score, repeat vs one-time customers
     repeat_scores = df.loc[df[TARGET] == 1, "review_score"].dropna()
     one_time_scores = df.loc[df[TARGET] == 0, "review_score"].dropna()
     t_stat, p_val = ttest_ind(repeat_scores, one_time_scores, equal_var=False)  # Welch's t-test
-    # pooled-SD Cohen's d, so the effect size sits next to the p-value on the
-    # dashboard - the finding is "significant but trivial" and the size is the point.
     n1, n2 = len(repeat_scores), len(one_time_scores)
     pooled_sd = np.sqrt(
         ((n1 - 1) * repeat_scores.var() + (n2 - 1) * one_time_scores.var()) / (n1 + n2 - 2)
@@ -173,7 +124,7 @@ def run_hypothesis_tests(df: pd.DataFrame) -> list[dict]:
         ),
     ))
 
-    # H2: repeat-purchase rate differs by payment type
+    # H2: repeat-purchase rate by payment type
     contingency = pd.crosstab(df["payment_type"], df[TARGET])
     chi2_stat, p_val_chi2, dof, _ = chi2_contingency(contingency)
     print(f"\nPayment type vs repeat purchase: chi2={chi2_stat:.2f}, dof={dof}, p={p_val_chi2:.4f}")
@@ -197,8 +148,7 @@ def build_pipeline(interaction_terms: bool) -> Pipeline:
         ("scale", StandardScaler()),
     ]
     if interaction_terms:
-        # pairwise products only (no squared terms) among the numeric features -
-        # bounded (8 features -> 36 columns), not a full polynomial expansion
+        # pairwise products only, no squared terms
         numeric_steps.append(("interact", PolynomialFeatures(degree=2, interaction_only=True, include_bias=False)))
     numeric_transformer = Pipeline(numeric_steps)
 
@@ -218,10 +168,7 @@ def build_pipeline(interaction_terms: bool) -> Pipeline:
 
 
 def cross_validate_pr_auc(interaction_terms: bool, X: pd.DataFrame, y: pd.Series, label: str) -> float:
-    """5-fold stratified CV, returns mean validation-fold PR-AUC. Also prints the
-    train-fold vs validation-fold gap as an overfitting check. Builds a fresh
-    pipeline per fold (rather than cloning one passed in) so there's no risk of
-    fold N reusing a fitted transformer from fold N-1."""
+    """5-fold stratified CV; returns mean validation PR-AUC."""
     skf = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
     train_scores, val_scores = [], []
 
@@ -239,13 +186,7 @@ def cross_validate_pr_auc(interaction_terms: bool, X: pd.DataFrame, y: pd.Series
 
 
 def likelihood_ratio_test(X_train: pd.DataFrame, y_train: pd.Series) -> tuple[float, dict]:
-    """Fits nested models in statsmodels to get a proper LR test:
-    is the interaction model's improvement in fit statistically significant, or
-    just noise?
-
-    Returns (p_value, row) - the row is persisted alongside the two hypothesis
-    tests so the dashboard can show why interaction terms were or weren't kept.
-    """
+    """LR test: is the interaction model's improvement in fit significant, or noise?"""
     print("\n=== Likelihood-ratio test: base numeric features vs. + their pairwise interactions ===")
 
     def numeric_design(interaction_terms: bool) -> np.ndarray:
@@ -292,12 +233,7 @@ def likelihood_ratio_test(X_train: pd.DataFrame, y_train: pd.Series) -> tuple[fl
 
 
 def _rank_and_decile(scores: pd.DataFrame) -> pd.DataFrame:
-    """Adds a 1-based rank and decile (1 = top 10% by repeat_probability, 10 =
-    bottom 10%) to a table already sorted descending by repeat_probability.
-    Rank-based rather than pd.qcut so duplicate probabilities - common here,
-    since several features are categorical - can't raise qcut's "duplicate
-    bin edges" error.
-    """
+    """Adds a 1-based rank and decile (1 = top 10%) to a table sorted by repeat_probability."""
     scores = scores.reset_index(drop=True)
     n = len(scores)
     scores["rank"] = np.arange(1, n + 1)
@@ -338,11 +274,7 @@ def evaluate_on_test(
             f"of actual repeat purchasers, vs {int(top_pct * 100)}% expected at random."
         )
 
-    # Persist the ranked, per-customer scores behind that lift stat - the actual
-    # list a stakeholder needs to see who's "in the top 10%", not just the
-    # aggregate capture rate above. This is the held-out TEST set: outcomes here
-    # are already known, so it validates the ranking rather than being a live
-    # call list - see score_scoring_candidates() for the list to actually act on.
+    # held-out test set scores, for validating the ranking (not a live call list)
     scored_test = _rank_and_decile(
         pd.DataFrame({
             "customer_unique_id": ids_test.to_numpy(),
@@ -362,16 +294,7 @@ def evaluate_on_test(
 
 
 def score_scoring_candidates(X: pd.DataFrame, y: pd.Series, interaction_terms: bool, engine) -> None:
-    """Score the customers repeat_purchase_features.sql's right-censoring cutoff
-    excludes: first-time buyers too recent to know yet whether they'll place a
-    second order. This - not the test-set lift numbers in evaluate_on_test - is
-    the actual live outreach candidate list, written out as a ranked,
-    per-customer table rather than only an aggregate stat.
-
-    Refits on ALL labelled data (train + test): evaluate_on_test has already
-    reported the held-out numbers, so there's no more leakage risk to protect -
-    the deployed model should use every labelled row available.
-    """
+    """Scores the live outreach candidates (recent first-time buyers), refit on all labelled data."""
     candidates = pd.read_sql(CANDIDATES_QUERY_PATH.read_text(), engine)
 
     if candidates.empty:
@@ -407,17 +330,12 @@ def score_scoring_candidates(X: pd.DataFrame, y: pd.Series, interaction_terms: b
 
 
 def odds_ratio_table(pipeline: Pipeline) -> pd.DataFrame:
-    """Per-feature odds ratios from the fitted logistic model. Prints the 5
-    strongest each way for the console reader; returns EVERY feature as a
-    DataFrame so write_dashboard_tables() can persist the full set (the
-    dashboard does its own Top-N on the bar chart)."""
+    """Per-feature odds ratios from the fitted logistic model."""
     model = pipeline.named_steps["model"]
     feature_names = pipeline.named_steps["preprocess"].get_feature_names_out()
     coef = model.coef_[0]
     table = (
         pd.DataFrame({
-            # drop the ColumnTransformer's "num__"/"cat__" prefixes - they carry
-            # nothing the chart needs and make the axis labels unreadable
             "feature": pd.Series(feature_names).str.replace(r"(num|cat)__", "", regex=True),
             "coefficient": coef,
             "odds_ratio": np.exp(coef),
@@ -444,29 +362,7 @@ def write_dashboard_tables(
     metric_ci_df: pd.DataFrame,
     metrics_row: dict,
 ) -> None:
-    """Persist the model's headline results as five small tables in the same DB
-    the per-customer score tables go to, so the dashboard's "Repeat-purchase
-    drivers" page binds to them directly instead of pasting console output:
-
-      repeat_purchase_odds_ratios          - one row per model feature (bar chart)
-      repeat_purchase_confidence_intervals - one row per feature, Wald CI on the
-                                              unregularized companion model (see
-                                              src/confidence_interval.py) - the
-                                              uncertainty band around the bars above
-      repeat_purchase_metric_confidence_intervals - one row per headline metric
-                                              (ROC-AUC, PR-AUC, top-10%/20% capture
-                                              rate), bootstrap CI on the held-out
-                                              test set
-      repeat_purchase_hypothesis_tests     - one row per test, with p-values
-      repeat_purchase_model_metrics        - single row of headline metrics (KPI cards)
-
-    Each is also written to Dashboard/exports/<name>.csv, so the web dashboard
-    can load the flat files without a DB connection.
-
-    if_exists="replace" (like repeat_purchase_test_scores) - the dashboard shows
-    the latest run. Every row carries run_at + git_commit, so this can be
-    switched to "append" for run-over-run history without a schema change.
-    """
+    """Writes five result tables to the DB and Dashboard/exports/*.csv."""
     run_at = datetime.now(timezone.utc)
     commit = metrics_row["git_commit"]
 
@@ -506,10 +402,6 @@ def main() -> None:
     )
 
     print("\n=== Cross-validation (train set only) ===")
-    # Feature set is logged with every run: this is what makes a later run's
-    # metrics comparable (or not) to this one - e.g. the geo features added here
-    # (customer_seller_distance_km, same_state, seller_state_seller_count) shift
-    # PR-AUC versus any run logged before them - see experiment_tracking.py.
     feature_config = {
         "numeric_features": ",".join(NUMERIC_FEATURES),
         "categorical_features": ",".join(CATEGORICAL_FEATURES),
@@ -526,9 +418,7 @@ def main() -> None:
         interact_cv = cross_validate_pr_auc(True, X_train, y_train, "+ Interaction terms")
         log({"cv_pr_auc": interact_cv, "lr_test_p_value": lr_p_value})
 
-    # Decision: default to the simpler model unless interactions clearly win on
-    # BOTH the predictive (CV PR-AUC) and inferential (LR test) check - see the
-    # printed output above for the LR test's verdict.
+    # default to the simpler model unless interactions clearly win on both checks
     use_interactions = interact_cv > base_cv + 0.01  # a small, deliberate bar - not "any" improvement
     chosen = build_pipeline(interaction_terms=use_interactions)
     label = "Logistic regression + interaction terms" if use_interactions else "Logistic regression (base features)"
@@ -550,9 +440,6 @@ def main() -> None:
             chosen, X_train, y_train, X_test, y_test, ids_test, label, engine
         )
         log(final_metrics)
-        # Also logged as MLflow table artifacts (in addition to the DB/CSV
-        # writes in write_dashboard_tables() below) so a single run's CIs are
-        # browsable in the MLflow UI without a DB connection.
         log_table(ci_df, artifact_file="confidence_intervals.json")
         log_table(metric_ci_df, artifact_file="metric_confidence_intervals.json")
 
