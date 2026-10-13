@@ -177,38 +177,3 @@ are used:
   (up to ±0.26 in log-odds), suggesting the geo features are mostly reshuffling signal
   `customer_state` already carried (distance is, after all, a function of where the customer
   and seller are) rather than adding new information.
-
-## Where this is going
-
-The analysis so far is diagnostic, not causal, and nothing is wired into a live workflow yet.
-Planned next steps:
-
-- **Show the confidence intervals on the dashboard.** They're now in the
-  `repeat_purchase_confidence_intervals` table / `Dashboard/exports/*.csv`; the dashboard's
-  repeat-purchase-drivers page still needs to join them onto the odds-ratio bar chart to show
-  uncertainty next to each point estimate.
-
-- **A written experiment design (not yet run)** for evaluating a retention campaign:
-  - **The causal question the model can't answer.** The odds ratios say fashion-accessory first
-    orders repeat more; they don't say nudging customers toward that category would raise repeat
-    purchase. Separating the two needs a randomised intervention, or an observational design that
-    names and adjusts for the likely confounders (product price, region-level income,
-    seasonality).
-  - **Targeting.** Who gets the intervention — e.g. the top deciles of the ranking model among
-    customers still inside the censoring window — and the rationale for that cut.
-  - **Primary metric.** Repeat-purchase rate within 90 days of the first order, treated vs. control.
-  - **Guardrail metrics.** The campaign must not degrade customers *outside* it: overall
-    purchasing rate, mean review score, and existing-customer retention rate are monitored against
-    pre-set tolerances, and the campaign is pulled if any is breached.
-
-- **Candidate interventions to test.** Post-first-purchase discount, personalised recommendations,
-  free shipping, priority delivery — each with a different cost profile and a different plausible
-  mechanism.
-
-Everything above is in service of three questions:
-
-1. **What drives repeat purchase, and how sure are we?** — drivers with uncertainty attached, not
-   bare point estimates.
-2. **Which customers should we target, and why?** — a defensible ranking with a stated rationale.
-3. **Do the interventions actually work?** — measured against a control, with guardrails, not
-   inferred from correlation.
