@@ -59,6 +59,29 @@ is real and not luck of the split.
 real orders from 2016–2018 across 8 tables (orders, items, payments, customers, reviews, products,
 geolocation, sellers).
 
+## How to run
+
+Tested on a fresh install with Python 3.13.
+
+```bash
+python -m venv .venv
+source .venv/bin/activate          # Windows: .venv\Scripts\activate
+pip install -r requirements.txt
+```
+
+1. Download the [Olist dataset from Kaggle](https://www.kaggle.com/datasets/olistbr/brazilian-ecommerce)
+   and unzip the CSVs into `data/raw/` (the data is not committed to this repo).
+2. Build the database and run the checks:
+
+```bash
+python src/etl.py                         # raw CSVs -> data/olist.db
+python -m pytest tests/ -q                # 36 tests (skipped, not failed, if the data is missing)
+python src/repeat_purchase_analysis.py    # hypothesis tests, model, confidence intervals, dashboard exports (~1 min)
+```
+
+The notebooks in `notebooks/` read from `data/olist.db`, so run the ETL step first. The t-SNE
+plot in `segmentation.ipynb` takes several minutes on the full customer set.
+
 ## How it's built
 
 1. **ETL** ([`src/etl.py`](src/etl.py)) – Loads the CSVs into a local SQLite database with light
