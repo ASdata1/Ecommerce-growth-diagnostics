@@ -11,6 +11,14 @@ from typing import Iterator
 import pytest
 
 DB_PATH = Path(__file__).resolve().parent.parent / "data" / "olist.db"
+RAW_DIR = Path(__file__).resolve().parent.parent / "data" / "raw"
+
+# The raw Olist CSVs are not committed (see README "How to run"), so tests that
+# read them directly are skipped, not failed, on a fresh clone.
+requires_raw = pytest.mark.skipif(
+    not (RAW_DIR / "olist_orders_dataset.csv").exists(),
+    reason="raw Olist CSVs not found in data/raw - download them from Kaggle (see README)",
+)
 
 # etl.py is meant to be run as `python src/etl.py`, so put src/ on sys.path the
 # same way before importing it here - see test_repeat_purchase_features.py.
@@ -58,16 +66,19 @@ def test_sellers_table_not_empty(conn: sqlite3.Connection) -> None:
     assert count > 0
 
 
+@requires_raw
 def test_load_orders_no_null_order_id() -> None:
     df = load_orders()
     assert df["order_id"].isnull().sum() == 0
 
 
+@requires_raw
 def test_load_customers_no_null_customer_id() -> None:
     df = load_customers()
     assert df["customer_id"].isnull().sum() == 0
 
 
+@requires_raw
 def test_load_geolocation_one_row_per_zip_prefix() -> None:
     # raw file has many lat/lng readings per prefix - load_geolocation() collapses
     # them so the geo join in queries/repeat_purchase_features.sql is 1:1
@@ -75,11 +86,13 @@ def test_load_geolocation_one_row_per_zip_prefix() -> None:
     assert df["geolocation_zip_code_prefix"].is_unique
 
 
+@requires_raw
 def test_load_sellers_no_null_seller_id() -> None:
     df = load_sellers()
     assert df["seller_id"].isnull().sum() == 0
 
 
+@requires_raw
 def test_order_id_integrity() -> None:
     # every order_id in order_items must also exist in orders
     orders_df = load_orders()
